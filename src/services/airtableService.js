@@ -164,41 +164,22 @@ function calcExteriorNet(exteriorArr) {
 
 export function buildProjectFields(projectData, user, pdfUrl = null) {
   const cust = projectData.customer || {};
-  const projectName = projectData.projectName || projectData.name || projectData.clientName || cust.name || "";
+  // Fold client name into Project Name — the Projects table has no "Client Name" column.
   const clientName = cust.name || cust.fullName || projectData.clientName || "";
-  const clientPhone = cust.mobile || cust.phone || projectData.clientMobile || "";
-  const clientEmail = cust.email || projectData.clientEmail || "";
-
-  const addressParts = [
-    cust.address || projectData.location || "",
-    cust.pincode ? String(cust.pincode) : "",
-    cust.location || cust.landmark || "",
-  ].filter(Boolean);
-  const fullAddress = addressParts.join(", ");
+  const projectName = projectData.projectName || projectData.name || clientName || "";
 
   const supervisorName = user?.name || user?.displayName || "Unknown";
-  const supervisorId = user?.id || user?.uid || "SUP-UNKNOWN";
-
-  const now = new Date();
-  const warrantyStart = toDateString(now);
-  const warrantyEnd = toDateString(new Date(now.getFullYear() + 1, now.getMonth(), now.getDate()));
 
   const projectId = generateCleanProjectId();
 
+  // Only include fields that exist as columns in the Airtable Projects table.
+  // Client details (phone, email, address) and warranty info live in the
+  // JSON Backup and/or the Customers table, not as Projects columns.
   return {
     fields: cleanPayload({
       "Project ID": projectId,
       "Project Name": projectName,
-      "Client Name": clientName,
-      "Client Phone": String(clientPhone),
-      "Client Email": clientEmail,
-      "Address": fullAddress,
       "Supervisor Name": supervisorName,
-      "Supervisor ID": supervisorId,
-      "PDF File": pdfUrl ? [{ url: pdfUrl }] : [],
-      "Warranty Start Date": warrantyStart,
-      "Warranty End Date": warrantyEnd,
-      "Warranty Status": "Active",
     }),
     projectId,
   };
@@ -656,7 +637,8 @@ export async function saveToAirtable(serializedData, projectData = {}, user = nu
     // 2. Project creation with clean ID + strict field mapping
     const { fields: projectFields, projectId } = buildProjectFields(projectData, user, pdfUrl);
 
-    // Attach customer link + JSON backup + legacy fields for backward compat
+    // Attach customer link + JSON backup + legacy fields for backward compat.
+    // Only include keys that are confirmed Airtable Projects columns.
     const fullProjectFields = cleanPayload({
       ...projectFields,
       "Category": serializedData.projectInfo?.category || projectData.projectCategory || projectData.category || "Residential House",
@@ -675,34 +657,34 @@ export async function saveToAirtable(serializedData, projectData = {}, user = nu
     const projectRecordId = newProject.id;
     if (!projectRecordId) throw new Error("Failed to create Project record in database.");
 
-    // 3. Measurements
+    // 3. Measurements — isolated failure, does not halt remaining syncs
     try {
       const measurementRecords = buildMeasurementRecords(serializedData, projectRecordId);
       if (measurementRecords.length > 0) {
         await batchCreate("Measurements", measurementRecords);
       }
     } catch (err) {
-      console.error("[Airtable Sync Error] Measurements table:", err);
+      console.warn("[Airtable Sync Warning] Measurements table skipped:", err);
     }
 
-    // 4. Wallpaper & Texture
+    // 4. Wallpaper and Texture — isolated failure, does not halt remaining syncs
     try {
       const featureRecords = buildFeatureRecords(serializedData, projectRecordId);
       if (featureRecords.length > 0) {
-        await batchCreate("Wallpaper & Texture", featureRecords);
+        await batchCreate("Wallpaper and Texture", featureRecords);
       }
     } catch (err) {
-      console.error("[Airtable Sync Error] Wallpaper & Texture table:", err);
+      console.warn("[Airtable Sync Warning] Wallpaper and Texture table skipped:", err);
     }
 
-    // 5. Material BOQ
+    // 5. Material BOQ — isolated failure, does not halt remaining syncs
     try {
       const boqRecords = buildBoqRecords(serializedData, projectRecordId);
       if (boqRecords.length > 0) {
         await batchCreate("Material BOQ", boqRecords);
       }
     } catch (err) {
-      console.error("[Airtable Sync Error] Material BOQ table:", err);
+      console.warn("[Airtable Sync Warning] Material BOQ table skipped:", err);
     }
 
     return { ok: true, projectRecordId, projectId };
