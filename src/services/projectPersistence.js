@@ -1,15 +1,13 @@
-import { saveToAirtable, fetchAllProjects, fetchProjectById, deleteProjectById } from "./airtablePersistence";
+import { saveToAirtable, fetchAllProjects, fetchProjectById, deleteProjectById, generateCleanProjectId } from "./airtablePersistence";
 import { serializeMasterJSON } from "../utils/paintShipSerializer";
 
 const LOCAL_KEY = "paintpro_v9";
 
+const PRJ_REGEX = /^PRJ-\d{5}$/;
+
 const ensureValidId = (id) => {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  const projRegex = /^PROJ-\d+$/;
-  
-  if (id && (uuidRegex.test(id) || projRegex.test(id))) return id;
-  
-  return `PROJ-${Date.now()}`;
+  if (id && PRJ_REGEX.test(id)) return id;
+  return generateCleanProjectId();
 };
 
 function readLocalAll() {
@@ -136,7 +134,7 @@ export function rehydrateProject(raw) {
   return p;
 }
 
-export async function saveProject(project) {
+export async function saveProject(project, user = null, pdfUrl = null) {
   if (!project) return { ok: false, synced: false, error: "Missing project data" };
   
   project.id = ensureValidId(project.id);
@@ -145,11 +143,11 @@ export async function saveProject(project) {
   upsertLocal(project);
 
   try {
-    const result = await saveToAirtable(serialized, project);
+    const result = await saveToAirtable(serialized, project, user, pdfUrl);
     
     if (!result.ok) throw new Error(result.error);
 
-    return { ok: true, synced: true, project, airtableId: result.projectRecordId };
+    return { ok: true, synced: true, project, airtableId: result.projectRecordId, projectId: result.projectId };
   } catch (err) {
     console.error("[Airtable Save Error]", err);
     return { ok: false, synced: true, project, fallbackLocal: true };
