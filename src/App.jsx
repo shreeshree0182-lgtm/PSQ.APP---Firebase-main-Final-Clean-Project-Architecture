@@ -957,21 +957,27 @@ function projectTotals(p) {
   }));
   return { net, mat, lab, labEx, totalIncl:mat+lab, totalExcl:labEx };
 }
+// Package-based fallback rates for exterior finishing when master rate lookup returns 0
+const EXT_PKG_FALLBACK_RATES = { putty: 12, primer: 9, paint: 32, protection: 18, texture: 35 };
 function calcExteriorMaterialCost(finishing, netArea, paintingType = "fresh") {
   return Object.entries(finishing||{}).reduce((s,[k,f]) => {
     if(!f.on) return s;
     const a=f.useRoom?netArea:(f.area||0);
-    const r = f.rate || getRateForFinish("exterior", f.type, k, paintingType) || 0;
+    const r = f.rate || getRateForFinish("exterior", f.type, k, paintingType) || EXT_PKG_FALLBACK_RATES[k] || 0;
     return s+r*(f.coats||1)*a;
   }, 0);
 }
 function calcExteriorLabourCost(config, netArea) {
   if ((config.labourMethod||"sqft")==="daily") return (config.dailyRate||0)*(config.workers||1)*(config.days||1);
-  return netArea*(config.labourRate||0);
+  const pkg = config.package || "premium";
+  const pkgLabour = { economy: 20, premium: 30, luxury: 40, ultra_luxury: 60 };
+  return netArea*(config.labourRate || pkgLabour[pkg] || 0);
 }
 function calcExteriorLabourCostExcl(config, netArea) {
   if ((config.labourMethod||"sqft")==="daily") return (config.dailyRate||0)*(config.workers||1)*(config.days||1);
-  return netArea*(config.labourRateExcl||0);
+  const pkg = config.package || "premium";
+  const pkgLabourExcl = { economy: 12, premium: 18, luxury: 25, ultra_luxury: 40 };
+  return netArea*(config.labourRateExcl || pkgLabourExcl[pkg] || 0);
 }
 // PAINT-EXT-002B — pure resolver. Old elevations saved before this ticket have no
 // exteriorOverride field at all; missing is treated identically to {useGlobal:true,
@@ -1086,12 +1092,16 @@ function calcExteriorConfiguredTotals(exterior, globalConfig, quoteMode, paintin
     const elArea = calcExteriorElevationNet(el);
     let resolved = resolveExteriorConfig(el, gc);
     
-    // BUG-FIX: Fallback auto-selection if area > 0 but no paint system selected
+    // BUG-FIX: Fallback auto-selection if area > 0 but no paint system selected.
+    //   Use the package type to derive the correct tier ID (e.g. "premium" →
+    //   "premium_ext") so getRateForFinish finds a real rate, not ₹0.
     if (elArea > 0) {
       const hasPaint = resolved.finishing?.paint?.on && resolved.finishing?.paint?.type;
       if (!hasPaint) {
         const fallbackPkg = resolved.package || gc.package || "premium";
-        const fallbackBrand = resolved.brand || gc.brand || "asian";
+        const pkgToTierId = { economy: "economy_ext", premium: "premium_ext", luxury: "luxury_ext", ultra_luxury: "ultra_luxury_ext" };
+        const fallbackTierId = pkgToTierId[fallbackPkg] || "premium_ext";
+        const fallbackRate = getRateForFinish("exterior", fallbackTierId, "paint", paintingType);
         resolved = {
           ...resolved,
           finishing: {
@@ -1099,12 +1109,26 @@ function calcExteriorConfiguredTotals(exterior, globalConfig, quoteMode, paintin
             paint: {
               on: true,
               useRoom: true,
-              type: getProductName(fallbackBrand, fallbackPkg, "exterior") || "Apex Ultima",
-              rate: getRateForFinish("exterior", getProductName(fallbackBrand, fallbackPkg, "exterior"), "paint", paintingType) || 0,
+              type: fallbackTierId,
+              rate: fallbackRate,
               coats: 2
             }
           }
         };
+      }
+    }
+    // Ensure every active finishing layer has a non-zero rate by falling back to
+    //   the master rate table or the package default.
+    if (elArea > 0 && resolved.finishing) {
+      const pkg = resolved.package || gc.package || "premium";
+      const pkgFallbackRate = { putty: 12, primer: 9, paint: 32, protection: 18, texture: 35 };
+      for (const layerKey of Object.keys(resolved.finishing)) {
+        const layer = resolved.finishing[layerKey];
+        if (!layer || !layer.on) continue;
+        if (!layer.rate || layer.rate === 0) {
+          const masterRate = getRateForFinish("exterior", layer.type, layerKey, paintingType);
+          layer.rate = masterRate || pkgFallbackRate[layerKey] || 0;
+        }
       }
     }
 
@@ -9027,7 +9051,7 @@ loadAllProjects().then(projects => {
         const joineryTotal = (doorWindowCalc.total||0) + (polishCalc.total||0);
         const joineryArea = (doorWindowCalc.area||0) + (polishCalc.net||0);
         const btmTotal=isJoinery?joineryTotal:isWallpaperMT?totals.wallpaper.total:isTextureMT?totals.texture.total:isExteriorMT?totals.exterior.total:totals.interior.total;
-        const btmArea=isJoinery?joineryArea:isWallpaperMT?totals.wallpaper.area:isTextureMT?totals.texture.area:isExteriorMT?totals.exterior.area:totals.interior.area;
+        const btmArea=grandArea;
         return <>
         {/* Totals strip — sits at the top boundary of the dark navy bar, no gap below */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,padding:"8px 8px 0"}}>

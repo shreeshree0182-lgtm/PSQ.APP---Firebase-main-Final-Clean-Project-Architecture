@@ -2,13 +2,14 @@ import React, { useState } from "react";
 import NumInp from "./NumInp.jsx";
 import { C, LBL, EXT_FIN_META } from "./shared.jsx";
 import { Inp, DropSel, CoatStepper } from "./shared.jsx";
+import { getRateForFinish } from "../data/finishMasterRates.ts";
 
-export default function ExteriorFinishingModule({ finishing, onChange, net, rateLocked=false, isAdmin=false }) {
+export default function ExteriorFinishingModule({ finishing, onChange, net, rateLocked=false, isAdmin=false, paintingType="fresh" }) {
   const rateDisabled = rateLocked && !isAdmin;
   const [openMap,setOpenMap]=useState({});
   const tog=k=>setOpenMap(p=>({...p,[k]:!p[k]}));
   const upF=(k,f,v)=>onChange({...finishing,[k]:{...finishing[k],[f]:v}});
-  const changeType=(k,typeId)=>{ const types=EXT_FIN_META[k]?.types||[]; const t=types.find(x=>x.id===typeId)||types[0]; onChange({...finishing,[k]:{...finishing[k],type:typeId,rate:t?.r||0}}); };
+  const changeType=(k,typeId)=>{ const types=EXT_FIN_META[k]?.types||[]; const t=types.find(x=>x.id===typeId)||types[0]; const masterRate=getRateForFinish("exterior",typeId,k,paintingType); onChange({...finishing,[k]:{...finishing[k],type:typeId,rate:masterRate||t?.r||0}}); };
   const entries=Object.entries(EXT_FIN_META);
   return <div>
     <div style={{fontSize:11,color:C.gray,fontWeight:600,marginBottom:14}}>Net exterior area: <b style={{color:C.orange}}>{net.toFixed(2)} sq ft</b></div>
