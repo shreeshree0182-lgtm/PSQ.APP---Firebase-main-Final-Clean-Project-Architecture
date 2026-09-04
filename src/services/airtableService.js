@@ -178,24 +178,38 @@ function calcExteriorNet(exteriorArr) {
 }
 
 /**
- * Aggregates all joinery / wood-metal items into a single summary string.
- * e.g. "3x Doors (67 sqft total), 2x Windows (40 sqft total)"
+ * Collects joinery / wood-metal items and groups them by floor+room.
+ * Returns a Map keyed by "floorName||roomName" → summary string.
+ * Items with no room match go under a "__global" key.
  */
-function formatJoinerySummary(serializedData) {
+function buildJoineryByRoom(serializedData) {
   const items = serializedData.woodAndMetalItems || serializedData.doorWindowItems || [];
-  if (!Array.isArray(items) || items.length === 0) return "";
+  const byRoom = new Map();
+  if (!Array.isArray(items) || items.length === 0) return byRoom;
 
-  const groups = {};
   for (const item of items) {
     const label = (item.itemType || item.customLabel || item.kind || "Item").trim();
     const display = label.charAt(0).toUpperCase() + label.slice(1);
     const sqft = Number(item.dimensions?.totalSqft || item.totalSqft || item.area || 0);
-    if (!groups[display]) groups[display] = { count: 0, area: 0 };
-    groups[display].count += 1;
-    groups[display].area += sqft;
+    const qty = Number(item.dimensions?.qty || item.qty || 1) || 1;
+    const floorName = String(item.location?.floorName || "").trim();
+    const roomName = String(item.location?.roomName || "").trim();
+    const key = floorName || roomName ? `${floorName}||${roomName}` : "__global";
+
+    if (!byRoom.has(key)) byRoom.set(key, { groups: {}, totalArea: 0 });
+    const entry = byRoom.get(key);
+    if (!entry.groups[display]) entry.groups[display] = { count: 0, area: 0 };
+    entry.groups[display].count += qty;
+    entry.groups[display].area += sqft;
+    entry.totalArea += sqft;
   }
 
-  return Object.entries(groups)
+  return byRoom;
+}
+
+function joineryMapToString(entry) {
+  if (!entry) return "";
+  return Object.entries(entry.groups)
     .map(([label, g]) => {
       const areaPart = g.area > 0 ? ` (${g.area.toFixed(2)} sqft total)` : "";
       return `${g.count}x ${label}${areaPart}`;
@@ -240,7 +254,7 @@ function toISODateString(dateVal) {
   if (!dateVal) return "";
   const d = new Date(dateVal);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toISOString();
+  return toDateString(d);
 }
 
 function buildPdfAttachment(pdfUrl) {
@@ -250,7 +264,7 @@ function buildPdfAttachment(pdfUrl) {
     if (match) return [{ content: match[2], filename: "project-invoice.pdf" }];
     return null;
   }
-  return [{ url: pdfUrl, filename: "project-invoice.pdf" }];
+  return [{ url: pdfUrl }];
 }
 
 export function buildProjectFields(projectData, user, pdfUrl = null) {
@@ -295,7 +309,9 @@ export function buildProjectFields(projectData, user, pdfUrl = null) {
 
 export function buildMeasurementRecords(serializedData, projectRecordId) {
   const records = [];
-  const joinerySummary = formatJoinerySummary(serializedData);
+  const joineryByRoom = buildJoineryByRoom(serializedData);
+  const globalJoinery = joineryByRoom.get("__global");
+  const globalJoineryStr = globalJoinery ? joineryMapToString(globalJoinery) : "";
 
   // Collect interior room entries
   const interiorEntries = [];
@@ -305,11 +321,15 @@ export function buildMeasurementRecords(serializedData, projectRecordId) {
     rooms.forEach((r) => {
       const netArea = calcRoomNetSqft(r);
       if (netArea > 0 || r.roomType || r.type) {
+        const floorName = String(f.floorName || f.name || "Ground Floor").trim();
+        const roomName = String(r.roomType || r.roomName || r.name || r.type || "Room").trim();
+        const joineryEntry = joineryByRoom.get(`${floorName}||${roomName}`);
         interiorEntries.push({
-          floorName: String(f.floorName || f.name || "Ground Floor").trim(),
-          roomName: String(r.roomType || r.roomName || r.name || r.type || "Room").trim(),
+          floorName,
+          roomName,
           area: Number(netArea.toFixed(2)),
           finishing: formatFinishingSteps(r.finishingSteps || r.steps),
+          joinery: joineryEntry ? joineryMapToString(joineryEntry) : "",
         });
       }
     });
@@ -342,21 +362,18 @@ export function buildMeasurementRecords(serializedData, projectRecordId) {
     const intEntry = interiorEntries[i] || null;
     const extEntry = exteriorEntries[i] || null;
 
-    const scope = intEntry && extEntry ? "Interior + Exterior" : intEntry ? "Interior" : "Exterior";
-
     records.push({
       fields: cleanPayload({
         "Measurement ID": genMeasurementId(),
         "Project": [projectRecordId],
-        "Scope": scope,
         "Floor Name": intEntry?.floorName || "",
         "Room Name": intEntry?.roomName || "",
         "Interior Area Sqft": intEntry?.area || "",
+        "Interior Finishing Steps": intEntry?.finishing || "",
         "Elevation Name": extEntry?.elevationName || "",
         "Exterior Area Sqft": extEntry?.area || "",
-        "Finishing Steps Details":
-          [intEntry?.finishing, extEntry?.finishing].filter(Boolean).join(" | ") || "",
-        "Joinery Details": joinerySummary || "",
+        "Exterior Finishing Steps": extEntry?.finishing || "",
+        "Joinery Details": intEntry?.joinery || globalJoineryStr || "",
       }),
     });
   }
@@ -563,6 +580,33 @@ export function buildBoqRecords(serializedData, projectRecordId) {
     const kg = Math.ceil(textureArea / COVERAGE.putty);
     const texBrand = (serializedData.specialFeatures?.textures || serializedData.textureItems || serializedData.TX2_textureItems || [])[0]?.brand || "Standard";
     addBoq("Texture", texBrand, `Texture Compound (${kg} Kg)`, kg, "Kg");
+  }
+
+  // Joinery & Wood Finishes — enamel + putty for all wood/metal items
+  const woodItems = serializedData.woodAndMetalItems || serializedData.doorWindowItems || [];
+  if (Array.isArray(woodItems) && woodItems.length > 0) {
+    let joineryArea = 0;
+    let totalCoats = 0;
+    let primaryBrand = "";
+    let primaryProduct = "";
+    for (const item of woodItems) {
+      const sqft = Number(item.dimensions?.totalSqft || item.totalSqft || item.area || 0);
+      const qty = Number(item.dimensions?.qty || item.qty || 1) || 1;
+      const coats = Number(item.coats || 1) || 1;
+      joineryArea += sqft * qty;
+      totalCoats += coats;
+      if (!primaryBrand) primaryBrand = item.brand || "";
+      if (!primaryProduct) primaryProduct = item.productName || item.product || "";
+    }
+    if (joineryArea > 0) {
+      const enamelCoverage = 160; // sqft/L per coat
+      const avgCoats = totalCoats > 0 ? Math.ceil(totalCoats / woodItems.length) : 2;
+      const enamelLiters = Math.ceil((joineryArea * avgCoats) / enamelCoverage);
+      const puttyKg = Math.ceil(joineryArea / COVERAGE.putty);
+      const brand = primaryBrand || intBrandName;
+      const product = primaryProduct || "Enamel Wood Finish";
+      addBoq("Joinery & Wood Finishes", brand, `${product} + Putty (${enamelLiters} L + ${puttyKg} Kg)`, enamelLiters + puttyKg, "L + Kg");
+    }
   }
 
   return records;
