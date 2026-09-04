@@ -192,6 +192,10 @@ const PROJECTS_TABLE_FIELDS = new Set([
   "Grand Total Amount",
   "JSON Backup",
   "Customer",
+  "Warranty Start Date",
+  "Warranty End Date",
+  "Warranty Status",
+  "PDF File",
 ]);
 
 function sanitizeToSchema(fields, allowlist) {
@@ -206,6 +210,23 @@ function sanitizeToSchema(fields, allowlist) {
   return cleaned;
 }
 
+function toISODateString(dateVal) {
+  if (!dateVal) return "";
+  const d = new Date(dateVal);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toISOString();
+}
+
+function buildPdfAttachment(pdfUrl) {
+  if (!pdfUrl || typeof pdfUrl !== "string") return null;
+  if (pdfUrl.startsWith("data:")) {
+    const match = pdfUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if (match) return [{ content: match[2], filename: "project-invoice.pdf" }];
+    return null;
+  }
+  return [{ url: pdfUrl, filename: "project-invoice.pdf" }];
+}
+
 export function buildProjectFields(projectData, user, pdfUrl = null) {
   const cust = projectData.customer || {};
   const clientName = cust.name || cust.fullName || projectData.clientName || "";
@@ -214,13 +235,18 @@ export function buildProjectFields(projectData, user, pdfUrl = null) {
   const supervisorName = user?.name || user?.displayName || projectData?.supervisorName || "Unknown";
   const supervisorId = projectData?.supervisorId || user?.cardId || "";
 
-  // Fold supervisor ID into the single "Supervisor Name" column since the
-  // Airtable Projects table has no "Supervisor ID" field.
   const supervisorDisplay = supervisorId
     ? `${supervisorName} (${supervisorId})`
     : supervisorName;
 
   const projectId = generateCleanProjectId();
+
+  const warranty = projectData.warranty || {};
+  const warrantyStart = toISODateString(warranty.startDate || warranty.start || "");
+  const warrantyEnd = toISODateString(warranty.endDate || warranty.end || "");
+  const warrantyStatus = warranty.status || "Active";
+
+  const pdfAttachment = buildPdfAttachment(pdfUrl);
 
   return {
     fields: sanitizeToSchema(
@@ -228,6 +254,10 @@ export function buildProjectFields(projectData, user, pdfUrl = null) {
         "Project ID": projectId,
         "Project Name": projectName,
         "Supervisor Name": supervisorDisplay,
+        "Warranty Start Date": warrantyStart,
+        "Warranty End Date": warrantyEnd,
+        "Warranty Status": warrantyStatus,
+        "PDF File": pdfAttachment,
       },
       PROJECTS_TABLE_FIELDS
     ),
@@ -252,10 +282,10 @@ export function buildMeasurementRecords(serializedData, projectRecordId) {
             "Measurement ID": genMeasurementId(),
             "Project": [projectRecordId],
             "Scope": "Interior",
-            "Floor / Area Name": String(f.floorName || f.name || "Ground Floor").trim(),
-            "Room / Elevation Name": String(r.roomType || r.roomName || r.name || r.type || "Room").trim(),
-            "Total Area Sqft": Number(netArea.toFixed(2)),
-            "Finishing Steps": formatFinishingSteps(r.finishingSteps || r.steps),
+            "Floor Name": String(f.floorName || f.name || "Ground Floor").trim(),
+            "Room Name": String(r.roomType || r.roomName || r.name || r.type || "Room").trim(),
+            "Interior Area Sqft": Number(netArea.toFixed(2)),
+            "Finishing Steps Details": formatFinishingSteps(r.finishingSteps || r.steps),
           }),
         });
       }
@@ -277,10 +307,9 @@ export function buildMeasurementRecords(serializedData, projectRecordId) {
             "Measurement ID": genMeasurementId(),
             "Project": [projectRecordId],
             "Scope": "Exterior",
-            "Floor / Area Name": "Exterior",
-            "Room / Elevation Name": String(s.sideName || s.name || "Elevation Side").trim(),
-            "Total Area Sqft": Number(sideArea.toFixed(2)),
-            "Finishing Steps": formatFinishingSteps(s.finishingSteps),
+            "Elevation Name": String(s.sideName || s.name || "Elevation Side").trim(),
+            "Exterior Area Sqft": Number(sideArea.toFixed(2)),
+            "Finishing Steps Details": formatFinishingSteps(s.finishingSteps),
           }),
         });
       }
@@ -436,7 +465,8 @@ export function buildBoqRecords(serializedData, projectRecordId) {
         "BOQ ID": genBoqId(),
         "Project": [projectRecordId],
         "Category": "Interior Paint",
-        "Brand & Product": `${intBrandName} — ${intProduct} (${liters} L)`,
+        "Brand": intBrandName,
+        "Product Line": `${intProduct} (${liters} L)`,
         "Total Quantity": Number(liters),
         "Unit": "Liters",
       }),
@@ -452,7 +482,8 @@ export function buildBoqRecords(serializedData, projectRecordId) {
         "BOQ ID": genBoqId(),
         "Project": [projectRecordId],
         "Category": "Exterior Paint",
-        "Brand & Product": `${extBrandName} — ${extProduct} (${liters} L)`,
+        "Brand": extBrandName,
+        "Product Line": `${extProduct} (${liters} L)`,
         "Total Quantity": Number(liters),
         "Unit": "Liters",
       }),
@@ -468,7 +499,8 @@ export function buildBoqRecords(serializedData, projectRecordId) {
         "BOQ ID": genBoqId(),
         "Project": [projectRecordId],
         "Category": "Putty",
-        "Brand & Product": `${intBrandName} — Wall Care Putty (${kg} Kg)`,
+        "Brand": intBrandName,
+        "Product Line": `Wall Care Putty (${kg} Kg)`,
         "Total Quantity": Number(kg),
         "Unit": "Kg",
       }),
@@ -483,7 +515,8 @@ export function buildBoqRecords(serializedData, projectRecordId) {
         "BOQ ID": genBoqId(),
         "Project": [projectRecordId],
         "Category": "Primer",
-        "Brand & Product": `${intBrandName} — Primer (${liters} L)`,
+        "Brand": intBrandName,
+        "Product Line": `Primer (${liters} L)`,
         "Total Quantity": Number(liters),
         "Unit": "Liters",
       }),
@@ -500,7 +533,8 @@ export function buildBoqRecords(serializedData, projectRecordId) {
         "BOQ ID": genBoqId(),
         "Project": [projectRecordId],
         "Category": "Wallpaper",
-        "Brand & Product": `${wpBrand} — Wallpaper Roll (${rolls} rolls)`,
+        "Brand": wpBrand,
+        "Product Line": `Wallpaper Roll (${rolls} rolls)`,
         "Total Quantity": Number(rolls),
         "Unit": "Rolls",
       }),
@@ -516,7 +550,8 @@ export function buildBoqRecords(serializedData, projectRecordId) {
         "BOQ ID": genBoqId(),
         "Project": [projectRecordId],
         "Category": "Texture",
-        "Brand & Product": `${texBrand} — Texture Compound (${kg} Kg)`,
+        "Brand": texBrand,
+        "Product Line": `Texture Compound (${kg} Kg)`,
         "Total Quantity": Number(kg),
         "Unit": "Kg",
       }),
