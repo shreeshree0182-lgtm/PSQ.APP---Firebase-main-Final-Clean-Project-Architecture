@@ -4,8 +4,7 @@
  * Tables handled:
  *   1. Projects          — clean 5-digit Project ID + strict field mapping
  *   2. Measurements      — Interior / Exterior / Wood-Metal / Wallpaper / Texture
- *   3. Wallpaper & Texture — Feature-level records
- *   4. Material BOQ       — Auto-calculated summary quantities
+ *   3. Material BOQ       — Auto-calculated summary quantities
  *
  * Every API call is wrapped in try-catch and returns { ok, error } on failure
  * so the UI never crashes.
@@ -30,11 +29,6 @@ export function generateCleanProjectId() {
 function genMeasurementId() {
   const digits = Math.floor(10000 + Math.random() * 90000);
   return `MEA-${digits}`;
-}
-
-function genFeatureId() {
-  const digits = Math.floor(10000 + Math.random() * 90000);
-  return `FEAT-${digits}`;
 }
 
 function genBoqId() {
@@ -307,11 +301,56 @@ export function buildProjectFields(projectData, user, pdfUrl = null) {
 
 // ─── 2. MEASUREMENTS TABLE ──────────────────────────────────────
 
+/**
+ * Aggregates all wallpaper and texture items into a single summary string.
+ * e.g. "Wallpaper: 20x20ft (400 sqft) | Texture: 10x12ft (120 sqft)"
+ */
+function formatWallpaperTextureSummary(serializedData) {
+  const parts = [];
+
+  const wallpapers = serializedData.specialFeatures?.wallpapers || serializedData.wallpaperItems || [];
+  if (Array.isArray(wallpapers) && wallpapers.length > 0) {
+    let totalArea = 0;
+    const dims = [];
+    for (const w of wallpapers) {
+      const width = Number(w.wallW || w.width || (w.wallDimensionsFt && w.wallDimensionsFt.width) || 0);
+      const height = Number(w.wallH || w.height || (w.wallDimensionsFt && w.wallDimensionsFt.height) || 0);
+      let area = Number(w.area || w.totalSqft || (w.wallDimensionsFt && w.wallDimensionsFt.totalSqft) || 0);
+      if ((!area || area === 0) && width && height) area = width * height;
+      totalArea += area;
+      if (width && height) dims.push(`${width}x${height}ft`);
+    }
+    const dimStr = dims.length > 0 ? dims.join(", ") : "";
+    const areaPart = totalArea > 0 ? ` (${totalArea.toFixed(2)} sqft)` : "";
+    parts.push(`Wallpaper: ${dimStr}${areaPart}`);
+  }
+
+  const textures = serializedData.specialFeatures?.textures || serializedData.textureItems || serializedData.TX2_textureItems || [];
+  if (Array.isArray(textures) && textures.length > 0) {
+    let totalArea = 0;
+    const dims = [];
+    for (const t of textures) {
+      const width = Number(t.wallW || t.width || (t.wallDimensionsFt && t.wallDimensionsFt.width) || 0);
+      const height = Number(t.wallH || t.height || (t.wallDimensionsFt && t.wallDimensionsFt.height) || 0);
+      let area = Number(t.area || t.totalSqft || (t.wallDimensionsFt && t.wallDimensionsFt.totalSqft) || 0);
+      if ((!area || area === 0) && width && height) area = width * height;
+      totalArea += area;
+      if (width && height) dims.push(`${width}x${height}ft`);
+    }
+    const dimStr = dims.length > 0 ? dims.join(", ") : "";
+    const areaPart = totalArea > 0 ? ` (${totalArea.toFixed(2)} sqft)` : "";
+    parts.push(`Texture: ${dimStr}${areaPart}`);
+  }
+
+  return parts.join(" | ");
+}
+
 export function buildMeasurementRecords(serializedData, projectRecordId) {
   const records = [];
   const joineryByRoom = buildJoineryByRoom(serializedData);
   const globalJoinery = joineryByRoom.get("__global");
   const globalJoineryStr = globalJoinery ? joineryMapToString(globalJoinery) : "";
+  const wallpaperTextureSummary = formatWallpaperTextureSummary(serializedData);
 
   // Collect interior room entries
   const interiorEntries = [];
@@ -374,6 +413,7 @@ export function buildMeasurementRecords(serializedData, projectRecordId) {
         "Exterior Area Sqft": extEntry?.area || "",
         "Exterior Finishing Steps": extEntry?.finishing || "",
         "Joinery Details": intEntry?.joinery || globalJoineryStr || "",
+        "Wallpaper & Texture Details": wallpaperTextureSummary || "",
       }),
     });
   }
@@ -381,65 +421,7 @@ export function buildMeasurementRecords(serializedData, projectRecordId) {
   return records;
 }
 
-// ─── 3. WALLPAPER & TEXTURE TABLE ───────────────────────────────
-
-export function buildFeatureRecords(serializedData, projectRecordId) {
-  const records = [];
-
-  const wallpapers = serializedData.specialFeatures?.wallpapers || serializedData.wallpaperItems || [];
-  if (Array.isArray(wallpapers)) {
-    wallpapers.forEach((w) => {
-      const width = Number(w.wallW || w.width || (w.wallDimensionsFt && w.wallDimensionsFt.width) || 0);
-      const height = Number(w.wallH || w.height || (w.wallDimensionsFt && w.wallDimensionsFt.height) || 0);
-      let area = Number(w.area || w.totalSqft || (w.wallDimensionsFt && w.wallDimensionsFt.totalSqft) || 0);
-      // Auto-calculate area from dimensions if missing or zero
-      if ((!area || area === 0) && width && height) {
-        area = width * height;
-      }
-      const dimStr = width && height ? `${width} x ${height} ft` : "";
-      const details = [w.design, w.brand, w.rollPreset, w.productName].filter(Boolean).join(", ");
-      records.push({
-        fields: cleanPayload({
-          "Feature ID": genFeatureId(),
-          "Project": [projectRecordId],
-          "Type": "Wallpaper",
-          "Dimensions": dimStr,
-          "Total Area Sqft": Number(area.toFixed(2)),
-          "Details": details,
-        }),
-      });
-    });
-  }
-
-  const textures = serializedData.specialFeatures?.textures || serializedData.textureItems || serializedData.TX2_textureItems || [];
-  if (Array.isArray(textures)) {
-    textures.forEach((t) => {
-      const width = Number(t.wallW || t.width || (t.wallDimensionsFt && t.wallDimensionsFt.width) || 0);
-      const height = Number(t.wallH || t.height || (t.wallDimensionsFt && t.wallDimensionsFt.height) || 0);
-      let area = Number(t.area || t.totalSqft || (t.wallDimensionsFt && t.wallDimensionsFt.totalSqft) || 0);
-      // Auto-calculate area from dimensions if missing or zero
-      if ((!area || area === 0) && width && height) {
-        area = width * height;
-      }
-      const dimStr = width && height ? `${width} x ${height} ft` : "";
-      const details = [t.type, t.customType, t.brand, t.productName].filter(Boolean).join(", ");
-      records.push({
-        fields: cleanPayload({
-          "Feature ID": genFeatureId(),
-          "Project": [projectRecordId],
-          "Type": "Texture",
-          "Dimensions": dimStr,
-          "Total Area Sqft": Number(area.toFixed(2)),
-          "Details": details,
-        }),
-      });
-    });
-  }
-
-  return records;
-}
-
-// ─── 4. MATERIAL BOQ TABLE ──────────────────────────────────────
+// ─── 3. MATERIAL BOQ TABLE ──────────────────────────────────────
 
 const BOQ_TABLE_FIELDS = new Set([
   "BOQ ID",
@@ -729,7 +711,7 @@ async function linkOrCreateCustomer(serializedData) {
 // ─── MAIN SAVE FUNCTION ─────────────────────────────────────────
 
 /**
- * Full save: Projects + Measurements + Wallpaper & Texture + Material BOQ.
+ * Full save: Projects + Measurements + Material BOQ.
  * Replaces the old saveToAirtable from airtablePersistence.js.
  *
  * @param {object} serializedData - Serialized project data from paintShipSerializer.
@@ -781,17 +763,7 @@ export async function saveToAirtable(serializedData, projectData = {}, user = nu
       console.warn("[Airtable Sync Warning] Measurements table skipped:", err);
     }
 
-    // 4. Wallpaper and Texture — isolated failure, does not halt remaining syncs
-    try {
-      const featureRecords = buildFeatureRecords(serializedData, projectRecordId);
-      if (featureRecords.length > 0) {
-        await batchCreate("Wallpaper and Texture", featureRecords);
-      }
-    } catch (err) {
-      console.warn("[Airtable Sync Warning] Wallpaper and Texture table skipped:", err);
-    }
-
-    // 5. Material BOQ — isolated failure, does not halt remaining syncs
+    // 3. Material BOQ — isolated failure, does not halt remaining syncs
     try {
       const boqRecords = buildBoqRecords(serializedData, projectRecordId);
       if (boqRecords.length > 0) {

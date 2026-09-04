@@ -194,8 +194,8 @@ export default function InvoiceModal({ project, totals, onClose }) {
   const companyAddr = companyAddress || "123 Corporate Plaza, MG Road, Mumbai - 400001, Maharashtra";
 
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:300, display:"flex", alignItems:"flex-start", justifyContent:"center", overflowY:"auto", padding:"16px 12px" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background:C.white, borderRadius:14, maxWidth:960, width:"100%", margin:"0 auto", boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:300, display:"flex", alignItems:"center", justifyContent:"center", overflowY:"auto", padding:"16px 12px" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background:C.white, borderRadius:14, maxWidth:960, width:"100%", margin:"auto", boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
         {/* Modal header bar */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", borderBottom:`1px solid ${C.border}` }} className="no-print">
           <div style={{ fontSize:13, fontWeight:700, color:C.navy }}>Invoice & Payment Schedule</div>

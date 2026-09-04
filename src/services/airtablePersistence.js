@@ -12,6 +12,5 @@ export {
   generateCleanProjectId,
   buildProjectFields,
   buildMeasurementRecords,
-  buildFeatureRecords,
   buildBoqRecords,
 } from "./airtableService";
