@@ -62,6 +62,23 @@ function cleanPayload(fields) {
   return cleaned;
 }
 
+/** Formats a number in Indian currency style with grouping, e.g. 227755 → "₹2,27,755" */
+function formatIndianCurrency(n) {
+  const s = Math.round(n || 0).toString();
+  if (s.length <= 3) return "₹" + s;
+  const last3 = s.slice(-3);
+  const rest = s.slice(0, -3);
+  return "₹" + rest.replace(/\B(?=(\d{2})+(?!\d))/g, ",") + "," + last3;
+}
+
+/** Parses a dimensions string like "10 x 10 ft" or "20 x 25 ft" and returns the product (area). */
+function parseDimensionsToArea(dimStr) {
+  if (!dimStr || typeof dimStr !== "string") return 0;
+  const nums = dimStr.match(/\d+(?:\.\d+)?/g);
+  if (!nums || nums.length < 2) return 0;
+  return Number(nums[0]) * Number(nums[1]);
+}
+
 /**
  * Calculates net interior wall/ceiling sqft for a room from its walls
  * and segments structure, ensuring a value > 0 is passed.
@@ -164,22 +181,30 @@ function calcExteriorNet(exteriorArr) {
 
 export function buildProjectFields(projectData, user, pdfUrl = null) {
   const cust = projectData.customer || {};
-  // Fold client name into Project Name — the Projects table has no "Client Name" column.
   const clientName = cust.name || cust.fullName || projectData.clientName || "";
   const projectName = projectData.projectName || projectData.name || clientName || "";
 
-  const supervisorName = user?.name || user?.displayName || "Unknown";
+  const supervisorName = user?.name || user?.displayName || projectData?.supervisorName || "Unknown";
+  const supervisorId = projectData?.supervisorId || user?.cardId || "";
 
   const projectId = generateCleanProjectId();
 
-  // Only include fields that exist as columns in the Airtable Projects table.
-  // Client details (phone, email, address) and warranty info live in the
-  // JSON Backup and/or the Customers table, not as Projects columns.
+  // Warranty fields — pulled from projectData (set by the UI) or defaults
+  const warranty = projectData?.warranty || {};
+  const warrantyStartDate = warranty.startDate || "";
+  const warrantyEndDate = warranty.endDate || "";
+  const warrantyStatus = warranty.status || (warrantyStartDate && warrantyEndDate ? "Active" : "");
+
   return {
     fields: cleanPayload({
       "Project ID": projectId,
       "Project Name": projectName,
       "Supervisor Name": supervisorName,
+      "Supervisor ID": supervisorId,
+      "Warranty Start Date": warrantyStartDate || undefined,
+      "Warranty End Date": warrantyEndDate || undefined,
+      "Warranty Status": warrantyStatus || undefined,
+      "PDF File": pdfUrl || undefined,
     }),
     projectId,
   };
@@ -237,70 +262,10 @@ export function buildMeasurementRecords(serializedData, projectRecordId) {
     });
   }
 
-  // Wood / Metal items
-  const joinery = serializedData.woodAndMetalItems || serializedData.doorWindowItems || [];
-  if (Array.isArray(joinery)) {
-    joinery.forEach((j) => {
-      const area = Number(j.dimensions?.totalSqft || j.sqft || j.totalSqft || 0);
-      if (area > 0 || j.itemType || j.type) {
-        const loc = j.location || {};
-        const locStr = [loc.floorName, loc.roomName].filter(Boolean).join(" — ") || "General";
-        records.push({
-          fields: cleanPayload({
-            "Measurement ID": genMeasurementId(),
-            "Project": [projectRecordId],
-            "Scope": "Wood/Metal",
-            "Floor / Area Name": loc.floorName || "General",
-            "Room / Elevation Name": String(j.customLabel || j.itemType || j.type || "Joinery Item").trim(),
-            "Total Area Sqft": Number(area.toFixed(2)),
-            "Finishing Steps": j.coats ? `${j.coats} ${j.coats === 1 ? "Coat" : "Coats"} ${j.finishType || j.productName || ""}`.trim() : "",
-          }),
-        });
-      }
-    });
-  }
-
-  // Wallpaper items
-  const wallpapers = serializedData.specialFeatures?.wallpapers || serializedData.wallpaperItems || [];
-  if (Array.isArray(wallpapers)) {
-    wallpapers.forEach((w) => {
-      const area = Number(w.area || w.totalSqft || (w.wallDimensionsFt && w.wallDimensionsFt.totalSqft) || 0);
-      if (area > 0 || w.label) {
-        records.push({
-          fields: cleanPayload({
-            "Measurement ID": genMeasurementId(),
-            "Project": [projectRecordId],
-            "Scope": "Wallpaper",
-            "Floor / Area Name": "Specialty",
-            "Room / Elevation Name": String(w.label || "Wallpaper Area").trim(),
-            "Total Area Sqft": Number(area.toFixed(2)),
-            "Finishing Steps": w.design || w.brand || "",
-          }),
-        });
-      }
-    });
-  }
-
-  // Texture items
-  const textures = serializedData.specialFeatures?.textures || serializedData.textureItems || serializedData.TX2_textureItems || [];
-  if (Array.isArray(textures)) {
-    textures.forEach((t) => {
-      const area = Number(t.area || t.totalSqft || (t.wallDimensionsFt && t.wallDimensionsFt.totalSqft) || 0);
-      if (area > 0 || t.label) {
-        records.push({
-          fields: cleanPayload({
-            "Measurement ID": genMeasurementId(),
-            "Project": [projectRecordId],
-            "Scope": "Texture",
-            "Floor / Area Name": "Specialty",
-            "Room / Elevation Name": String(t.label || "Texture Finish").trim(),
-            "Total Area Sqft": Number(area.toFixed(2)),
-            "Finishing Steps": t.type || t.customType || "",
-          }),
-        });
-      }
-    });
-  }
+  // NOTE: Wood/Metal, Wallpaper, and Texture scopes are NOT included in the
+  // Measurements table — they belong in the Joinery table and the
+  // "Wallpaper and Texture" table respectively. The Measurements table
+  // strictly handles Interior and Exterior only.
 
   return records;
 }
@@ -315,14 +280,19 @@ export function buildFeatureRecords(serializedData, projectRecordId) {
     wallpapers.forEach((w) => {
       const width = Number(w.wallW || w.width || (w.wallDimensionsFt && w.wallDimensionsFt.width) || 0);
       const height = Number(w.wallH || w.height || (w.wallDimensionsFt && w.wallDimensionsFt.height) || 0);
-      const area = Number(w.area || w.totalSqft || (w.wallDimensionsFt && w.wallDimensionsFt.totalSqft) || 0);
-      const details = [w.design, w.brand, w.rollPreset].filter(Boolean).join(", ");
+      let area = Number(w.area || w.totalSqft || (w.wallDimensionsFt && w.wallDimensionsFt.totalSqft) || 0);
+      // Auto-calculate area from dimensions if missing or zero
+      if ((!area || area === 0) && width && height) {
+        area = width * height;
+      }
+      const dimStr = width && height ? `${width} x ${height} ft` : "";
+      const details = [w.design, w.brand, w.rollPreset, w.productName].filter(Boolean).join(", ");
       records.push({
         fields: cleanPayload({
           "Feature ID": genFeatureId(),
           "Project": [projectRecordId],
           "Type": "Wallpaper",
-          "Dimensions": width && height ? `${width} x ${height} ft` : "",
+          "Dimensions": dimStr,
           "Total Area Sqft": Number(area.toFixed(2)),
           "Details": details,
         }),
@@ -335,14 +305,19 @@ export function buildFeatureRecords(serializedData, projectRecordId) {
     textures.forEach((t) => {
       const width = Number(t.wallW || t.width || (t.wallDimensionsFt && t.wallDimensionsFt.width) || 0);
       const height = Number(t.wallH || t.height || (t.wallDimensionsFt && t.wallDimensionsFt.height) || 0);
-      const area = Number(t.area || t.totalSqft || (t.wallDimensionsFt && t.wallDimensionsFt.totalSqft) || 0);
-      const details = [t.type, t.customType, t.brand].filter(Boolean).join(", ");
+      let area = Number(t.area || t.totalSqft || (t.wallDimensionsFt && t.wallDimensionsFt.totalSqft) || 0);
+      // Auto-calculate area from dimensions if missing or zero
+      if ((!area || area === 0) && width && height) {
+        area = width * height;
+      }
+      const dimStr = width && height ? `${width} x ${height} ft` : "";
+      const details = [t.type, t.customType, t.brand, t.productName].filter(Boolean).join(", ");
       records.push({
         fields: cleanPayload({
           "Feature ID": genFeatureId(),
           "Project": [projectRecordId],
           "Type": "Texture",
-          "Dimensions": width && height ? `${width} x ${height} ft` : "",
+          "Dimensions": dimStr,
           "Total Area Sqft": Number(area.toFixed(2)),
           "Details": details,
         }),
@@ -365,6 +340,22 @@ export function buildFeatureRecords(serializedData, projectRecordId) {
 export function buildBoqRecords(serializedData, projectRecordId) {
   const records = [];
   const COVERAGE = { paint: 140, putty: 40, primer: 100 };
+
+  // Brand name lookup maps — resolve internal brand keys to display names
+  const BRAND_NAMES = {
+    asian: "Asian Paints", berger: "Berger Paints", nerolac: "Kansai Nerolac",
+    indigo: "Indigo Paints", jsw: "JSW Paints", shalimar: "Shalimar Paints",
+    birla: "Birla Opus", nippon: "Nippon Paint", della: "Della Paints",
+    dulux: "Dulux", akzo: "Akzo Nobel", benjamin: "Benjamin Moore",
+    sherwin: "Sherwin-Williams", farrow: "Farrow & Ball", jotun: "Jotun",
+    other: "Other Brand",
+  };
+  const BRAND_PRODUCTS_MAP = {
+    asian:    { interior:{ economy:"Tractor Emulsion", premium:"Apcolite Premium", luxury:"Royale Luxury Emulsion", ultra_luxury:"Royale Aspira" }, exterior:{ economy:"Ace Exterior Emulsion", premium:"Apex Exterior Emulsion", luxury:"Apex Ultima", ultra_luxury:"Apex Ultima Protek" } },
+    berger:   { interior:{ economy:"Bison Emulsion", premium:"Easy Clean", luxury:"Silk Luxury Emulsion", ultra_luxury:"Silk Glamour" }, exterior:{ economy:"Rangoli Total Care", premium:"WeatherCoat All Guard", luxury:"WeatherCoat Long Life", ultra_luxury:"WeatherCoat Antidust" } },
+    nerolac:  { interior:{ economy:"Beauty Gold", premium:"Impressions", luxury:"Impressions HD", ultra_luxury:"Impressions Shyne" }, exterior:{ economy:"Nerolac Excel Total", premium:"Excel Mica Marble", luxury:"Excel Duraplus", ultra_luxury:"Nerolac Excel Ultima" } },
+    other:    { interior:{}, exterior:{} },
+  };
 
   // Aggregate areas
   let interiorArea = 0;
@@ -400,10 +391,19 @@ export function buildBoqRecords(serializedData, projectRecordId) {
     });
   }
 
+  // Resolve the actual selected brand names from project data
+  const intBrandKey = floors[0]?.rooms?.[0]?.brand || "asian";
+  const intBrandName = BRAND_NAMES[intBrandKey] || intBrandKey;
+  const intPkg = floors[0]?.rooms?.[0]?.package || "premium";
+  const intProduct = BRAND_PRODUCTS_MAP[intBrandKey]?.interior?.[intPkg] || intPkg;
+
+  const extBrandKey = serializedData.exteriorWork?.brand || "asian";
+  const extBrandName = BRAND_NAMES[extBrandKey] || extBrandKey;
+  const extPkg = serializedData.exteriorWork?.package || "premium";
+  const extProduct = BRAND_PRODUCTS_MAP[extBrandKey]?.exterior?.[extPkg] || extPkg;
+
   // Interior Paint
   if (interiorArea > 0) {
-    const pkg = floors[0]?.rooms?.[0]?.package || "premium";
-    const brand = floors[0]?.rooms?.[0]?.brand || "asian";
     const coats = 2;
     const liters = Math.ceil((interiorArea * coats) / COVERAGE.paint);
     records.push({
@@ -411,7 +411,7 @@ export function buildBoqRecords(serializedData, projectRecordId) {
         "BOQ ID": genBoqId(),
         "Project": [projectRecordId],
         "Category": "Interior Paint",
-        "Brand & Product": `${brand} — ${pkg}`,
+        "Brand & Product": `${intBrandName} — ${intProduct} (${liters} L)`,
         "Total Quantity": Number(liters),
         "Unit": "Liters",
       }),
@@ -420,8 +420,6 @@ export function buildBoqRecords(serializedData, projectRecordId) {
 
   // Exterior Paint
   if (exteriorArea > 0) {
-    const extPkg = serializedData.exteriorWork?.package || "premium";
-    const extBrand = serializedData.exteriorWork?.brand || "asian";
     const coats = 2;
     const liters = Math.ceil((exteriorArea * coats) / COVERAGE.paint);
     records.push({
@@ -429,7 +427,7 @@ export function buildBoqRecords(serializedData, projectRecordId) {
         "BOQ ID": genBoqId(),
         "Project": [projectRecordId],
         "Category": "Exterior Paint",
-        "Brand & Product": `${extBrand} — ${extPkg}`,
+        "Brand & Product": `${extBrandName} — ${extProduct} (${liters} L)`,
         "Total Quantity": Number(liters),
         "Unit": "Liters",
       }),
@@ -445,7 +443,7 @@ export function buildBoqRecords(serializedData, projectRecordId) {
         "BOQ ID": genBoqId(),
         "Project": [projectRecordId],
         "Category": "Putty",
-        "Brand & Product": "Birla White Wallcare Putty",
+        "Brand & Product": `${intBrandName} — Wall Care Putty (${kg} Kg)`,
         "Total Quantity": Number(kg),
         "Unit": "Kg",
       }),
@@ -460,7 +458,7 @@ export function buildBoqRecords(serializedData, projectRecordId) {
         "BOQ ID": genBoqId(),
         "Project": [projectRecordId],
         "Category": "Primer",
-        "Brand & Product": "Asian Paints Primer",
+        "Brand & Product": `${intBrandName} — Primer (${liters} L)`,
         "Total Quantity": Number(liters),
         "Unit": "Liters",
       }),
@@ -471,12 +469,13 @@ export function buildBoqRecords(serializedData, projectRecordId) {
   if (wallpaperArea > 0) {
     const rollArea = 0.53 * 10;
     const rolls = Math.ceil(wallpaperArea / rollArea);
+    const wpBrand = (serializedData.specialFeatures?.wallpapers || serializedData.wallpaperItems || [])[0]?.brand || "Standard";
     records.push({
       fields: cleanPayload({
         "BOQ ID": genBoqId(),
         "Project": [projectRecordId],
         "Category": "Wallpaper",
-        "Brand & Product": "Standard Wallpaper Roll",
+        "Brand & Product": `${wpBrand} — Wallpaper Roll (${rolls} rolls)`,
         "Total Quantity": Number(rolls),
         "Unit": "Rolls",
       }),
@@ -486,12 +485,13 @@ export function buildBoqRecords(serializedData, projectRecordId) {
   // Texture
   if (textureArea > 0) {
     const kg = Math.ceil(textureArea / COVERAGE.putty);
+    const texBrand = (serializedData.specialFeatures?.textures || serializedData.textureItems || serializedData.TX2_textureItems || [])[0]?.brand || "Standard";
     records.push({
       fields: cleanPayload({
         "BOQ ID": genBoqId(),
         "Project": [projectRecordId],
         "Category": "Texture",
-        "Brand & Product": "Texture Compound",
+        "Brand & Product": `${texBrand} — Texture Compound (${kg} Kg)`,
         "Total Quantity": Number(kg),
         "Unit": "Kg",
       }),
@@ -644,7 +644,7 @@ export async function saveToAirtable(serializedData, projectData = {}, user = nu
       "Category": serializedData.projectInfo?.category || projectData.projectCategory || projectData.category || "Residential House",
       "Type": serializedData.projectInfo?.type || projectData.projectType || projectData.type || "Fresh Painting",
       "Quote Mode": serializedData.projectInfo?.quoteMode || projectData.quoteMode || "Labour Only",
-      "Grand Total Amount": Number(serializedData.summaryMetrics?.grandTotal || serializedData.grandTotal || 0),
+      "Grand Total Amount": formatIndianCurrency(Number(serializedData.summaryMetrics?.grandTotal || serializedData.grandTotal || 0)),
       "JSON Backup": JSON.stringify(serializedData),
       "Customer": customerRecordId ? [customerRecordId] : undefined,
     });

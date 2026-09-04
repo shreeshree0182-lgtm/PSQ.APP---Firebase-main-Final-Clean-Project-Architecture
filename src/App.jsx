@@ -620,6 +620,7 @@ function createNewProject(user) {
     dwItems:[], wpItems:[], textureItems:[], polishItems:defPolish(),
     exterior:defExterior(), exteriorConfig:defExteriorConfig(),
     interiorCharges:defSectionCharges(), exteriorCharges:defSectionCharges(),
+    warranty:{ startDate:"", endDate:"", status:"" },
     floors:[newFloor("Ground Floor","premium","asian")] };
 }
 
@@ -845,6 +846,9 @@ function rehydrateProject(raw, user) {
   // ── Section charges ──
   p.interiorCharges = raw.interiorCharges || defSectionCharges();
   p.exteriorCharges = raw.exteriorCharges || defSectionCharges();
+
+  // ── Warranty ──
+  p.warranty = raw.warranty || { startDate:"", endDate:"", status:"" };
 
   // ── Misc internal flags ──
   p.isAutoToolsMode = raw.isAutoToolsMode !== undefined ? raw.isAutoToolsMode : true;
@@ -7867,6 +7871,7 @@ loadAllProjects().then(projects => {
           textures: project?.TX2_textureItems || project?.textureItems || []
         },
         warranties: project?.warranties || [],
+        warranty: project?.warranty || { startDate:"", endDate:"", status:"" },
         grandTotal: computedTotal || project?.grandTotal || project?.totalAmount || 0,
         totalAmount: computedTotal || project?.totalAmount || 0,
         totalArea: computedArea || project?.totalArea || 0,

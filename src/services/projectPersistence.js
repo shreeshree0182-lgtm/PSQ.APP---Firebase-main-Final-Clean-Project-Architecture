@@ -127,6 +127,8 @@ export function rehydrateProject(raw) {
   
   p.exteriorConfig = raw.exteriorConfig || raw.exteriorWork?.config || {};
 
+  p.warranty = raw.warranty || { startDate: "", endDate: "", status: "" };
+
   const sm = raw.summaryMetrics || {};
   if (!p.grandTotal) p.grandTotal = raw.grandTotal || sm.grandTotal || raw.totalAmount || 0;
   if (!p.totalSqft) p.totalSqft = raw.totalSqft || sm.totalInteriorSqft || 0;
