@@ -147,6 +147,51 @@ const ensureValidUUID = (id) => {
   }
 };
 
+/**
+ * Converts an internal finishing object ({putty:{on,coats,type}, primer:{...}, ...})
+ * into the serialized finishingSteps array format. Falls back to any pre-existing
+ * finishingSteps/steps array if the finishing object is absent.
+ */
+function finishingToSteps(source) {
+  if (!source) return [];
+  // Already in array format (legacy or pre-serialized)
+  if (Array.isArray(source.finishingSteps)) return source.finishingSteps.map(function(step, index) {
+    return {
+      stepOrder: Number(step.stepOrder || (index + 1)) || (index + 1),
+      service: step.service || step.name || "",
+      product: step.product || "",
+      coats: Number(step.coats || 1) || 1,
+      enabled: step.enabled !== false
+    };
+  });
+  if (Array.isArray(source.steps)) return source.steps.map(function(step, index) {
+    return {
+      stepOrder: Number(step.stepOrder || (index + 1)) || (index + 1),
+      service: step.service || step.name || "",
+      product: step.product || "",
+      coats: Number(step.coats || 1) || 1,
+      enabled: step.enabled !== false
+    };
+  });
+  // Internal object format: { putty:{on,coats,type}, primer:{...}, paint:{...}, ... }
+  var fin = source.finishing;
+  if (!fin || typeof fin !== "object") return [];
+  var order = ["putty", "primer", "paint", "wallpaper", "texture"];
+  var steps = [];
+  order.forEach(function(key, i) {
+    var layer = fin[key];
+    if (!layer || layer.on === false) return;
+    steps.push({
+      stepOrder: i + 1,
+      service: key.charAt(0).toUpperCase() + key.slice(1),
+      product: layer.customName || layer.type || "",
+      coats: Number(layer.coats || 1) || 1,
+      enabled: true
+    });
+  });
+  return steps;
+}
+
 export function serializeMasterJSON(projectData) {
   const normalizedData = {
     projectInfo: {
@@ -254,15 +299,7 @@ export function serializeMasterJSON(projectData) {
           sections: side.sections || [],
           deductions: side.deductions || [],
           additions: side.additions || [],
-          finishingSteps: (side.finishingSteps || []).map(function(step, index) {
-            return {
-              stepOrder: Number(step.stepOrder || (index + 1)) || (index + 1),
-              service: step.service || step.name || "",
-              product: step.product || "",
-              coats: Number(step.coats || 1) || 1,
-              enabled: step.enabled !== false
-            };
-          })
+          finishingSteps: finishingToSteps(side)
         };
       }),
       treatments: ((projectData?.exteriorWork?.treatments) || projectData?.exteriorTreatments || []).map(function(treatment) {
@@ -293,15 +330,7 @@ export function serializeMasterJSON(projectData) {
             extraWalls: room.extraWalls || [],
             openings: room.openings || [],
             ceiling: room.ceiling || null,
-            finishingSteps: (room.finishingSteps || room.steps || []).map(function(step, index) {
-              return {
-                stepOrder: Number(step.stepOrder || (index + 1)) || (index + 1),
-                service: step.service || step.name || "",
-                product: step.product || "",
-                coats: Number(step.coats || 1) || 1,
-                enabled: step.enabled !== false
-              };
-            })
+            finishingSteps: finishingToSteps(room)
           };
         })
       };

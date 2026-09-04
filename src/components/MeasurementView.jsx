@@ -49,6 +49,7 @@ export default function MeasurementView({
           af={af} ar={ar} setAf={setAf} setAr={setAr}
           upRoom={upRoom} withMat={withMat} inr={inr}
           calcRoom={calcRoom} calcNet={calcNet} addRoom={addRoom} addFloor={addFloor}
+          up={up}
         />
         <RoomEditor room={room} onUpdate={upRoom} quoteMode={project.quoteMode} category={project.category} projectType={project.projectType || "fresh"}/>
       </div>}

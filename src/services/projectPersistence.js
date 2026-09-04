@@ -126,6 +126,13 @@ export function rehydrateProject(raw) {
   }
   
   p.exteriorConfig = raw.exteriorConfig || raw.exteriorWork?.config || {};
+  if (raw.exteriorWork && (raw.exteriorWork.brand || raw.exteriorWork.package)) {
+    p.exteriorConfig = {
+      ...p.exteriorConfig,
+      brand: p.exteriorConfig.brand || raw.exteriorWork.brand || "",
+      package: p.exteriorConfig.package || raw.exteriorWork.package || "",
+    };
+  }
 
   p.warranty = raw.warranty || { startDate: "", endDate: "", status: "" };
 

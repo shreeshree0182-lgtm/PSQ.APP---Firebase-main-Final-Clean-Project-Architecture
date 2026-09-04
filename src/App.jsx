@@ -787,13 +787,61 @@ function rehydrateProject(raw, user) {
         conditionIssues: s.conditionIssues || [],
         conditionNotes: s.conditionNotes || "",
         conditionPhotos: s.conditionPhotos || [],
-        exteriorOverride: s.exteriorOverride || defExteriorOverride(),
+        exteriorOverride: s.exteriorOverride || (s.selectedProduct || s.brand || s.packageType ? {
+          useGlobal: false,
+          config: {
+            package: s.packageType || s.selectedProduct || "",
+            brand: s.brand || "",
+            finishing: s.finishingSteps && s.finishingSteps.length > 0
+              ? (() => {
+                  const fin = defExteriorFinishing(s.packageType || "premium", p.projectType || "fresh");
+                  const svc = s.finishingSteps.map(st => (st.service || "").toLowerCase());
+                  if (fin.putty) fin.putty.on = svc.includes("putty");
+                  if (fin.primer) fin.primer.on = svc.includes("primer");
+                  if (fin.paint) fin.paint.on = svc.includes("paint");
+                  if (fin.protection) fin.protection.on = svc.includes("protection");
+                  if (fin.texture) fin.texture.on = svc.includes("texture");
+                  return fin;
+                })()
+              : undefined
+          }
+        } : defExteriorOverride()),
       };
     });
   } else if (hasDetailedExterior) {
     p.exterior = raw.exterior.map(el => migrateElevation(el));
   }
-  p.exteriorConfig = raw.exteriorConfig || p.exteriorConfig || defExteriorConfig();
+
+  // Rehydrate exteriorConfig: deep-merge raw.exteriorConfig (internal format) with
+  // defaults, or reconstruct from serialized exteriorWork fields (package, brand).
+  // Ensures all finishing layers exist and retains saved brand/package/finishing.
+  (function() {
+    const def = defExteriorConfig();
+    const rawCfg = raw.exteriorConfig || {};
+    const extWork = raw.exteriorWork || {};
+    const pkg = rawCfg.package || extWork.package || raw.defaultPkg || "premium";
+    const brand = rawCfg.brand || extWork.brand || raw.defaultBrand || "asian";
+    const defFin = defExteriorFinishing(pkg, p.projectType || "fresh");
+    const rawFin = rawCfg.finishing || {};
+    const mergedFinishing = {};
+    Object.keys(defFin).forEach(key => {
+      mergedFinishing[key] = { ...defFin[key], ...(rawFin[key] || {}) };
+    });
+    p.exteriorConfig = {
+      ...def,
+      ...rawCfg,
+      package: pkg,
+      brand: brand,
+      customBrand: rawCfg.customBrand || "",
+      labourRate: rawCfg.labourRate ?? (PACKAGES[pkg]?.labour ?? def.labourRate),
+      labourRateExcl: rawCfg.labourRateExcl ?? (PACKAGES[pkg]?.labourExcl ?? def.labourRateExcl),
+      labourMethod: rawCfg.labourMethod || "sqft",
+      dailyRate: rawCfg.dailyRate || 0,
+      workers: rawCfg.workers || 1,
+      days: rawCfg.days || 1,
+      finishing: mergedFinishing,
+    };
+  })();
 
   // ── Door / Window / Joinery ──
   const rawDW = raw.doorWindowItems || (raw.woodAndMetalItems || []).filter(it => !it.itemType?.includes("Polish"));
@@ -1660,10 +1708,39 @@ function ExteriorFinishingModule({ finishing, onChange, net, locked=false, paint
 
 // Measurement screen header: floor chips, room chips
 // Package/brand/finishing selection moved to Finish step — see Paints & Finish (Step 5).
-function MeasurementHeader({ project, floor, room, af, ar, setAf, setAr, upRoom, withMat, inr, calcRoom, calcNet, addRoom, addFloor }) {
+function MeasurementHeader({ project, floor, room, af, ar, setAf, setAr, upRoom, withMat, inr, calcRoom, calcNet, addRoom, addFloor, up }) {
   const safeProject = project || {};
   const safeFloor = floor || {};
   const safeRoom = room || {};
+
+  const removeFloor = (fi) => {
+    const floors = safeProject.floors || [];
+    if (floors.length <= 1) return;
+    const next = floors.filter((_, i) => i !== fi);
+    up(p => ({ ...p, floors: next }));
+    if (fi === af) {
+      setAf(Math.max(0, fi - 1));
+      setAr(0);
+    } else if (fi < af) {
+      setAf(af - 1);
+    }
+  };
+
+  const removeRoom = (ri) => {
+    const rooms = safeFloor.rooms || [];
+    if (rooms.length <= 1) return;
+    const next = rooms.filter((_, i) => i !== ri);
+    up(p => {
+      const floors = (p.floors || []).map((fl, fi) => fi === af ? { ...fl, rooms: next } : fl);
+      return { ...p, floors };
+    });
+    if (ri === ar) {
+      setAr(Math.max(0, ri - 1));
+    } else if (ri < ar) {
+      setAr(ar - 1);
+    }
+  };
+
   return <>
     {/* ── Breadcrumb: Selected Floor → Selected Room ── */}
     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:7,padding:"6px 10px",
@@ -1682,13 +1759,23 @@ function MeasurementHeader({ project, floor, room, af, ar, setAf, setAr, upRoom,
         {(safeProject.floors || []).map((fl,fi)=>{
           const nameStr = (fl.name || '').toString();
           const abbr = nameStr.replace("Ground","GF").replace("First","FF").replace("Second","SF").replace("Third","TF").replace("Fourth","4F").replace(" Floor","").replace("Floor","").trim() || (fl.name || '').slice(0,3);
-          return <button key={fl.id || fi} onClick={()=>{setAf(fi);setAr(0);}}
-            style={{padding:"5px 14px",minHeight:32,borderRadius:20,fontSize:11,fontWeight:700,cursor:"pointer",
-              border:`2px solid ${fi===af?C.orange:C.border}`,
-              background:fi===af?C.orange:"#F8FAFC",
-              color:fi===af?"#fff":C.gray,transition:"all 0.15s"}}>
-            {abbr}
-          </button>;
+          const canRemoveFloor = (safeProject.floors || []).length > 1;
+          return <div key={fl.id || fi} style={{display:"inline-flex",alignItems:"center",gap:0}}>
+            <button onClick={()=>{setAf(fi);setAr(0);}}
+              style={{padding:"5px 14px",minHeight:32,borderRadius:"20px 0 0 20px",fontSize:11,fontWeight:700,cursor:"pointer",
+                border:`2px solid ${fi===af?C.orange:C.border}`,
+                background:fi===af?C.orange:"#F8FAFC",
+                color:fi===af?"#fff":C.gray,transition:"all 0.15s"}}>
+              {abbr}
+            </button>
+            {canRemoveFloor && <button onClick={(e)=>{e.stopPropagation();removeFloor(fi);}}
+              style={{padding:"5px 8px",minHeight:32,borderRadius:"0 20px 20px 0",fontSize:11,fontWeight:800,cursor:"pointer",
+                border:`2px solid ${fi===af?C.orange:C.border}`,borderLeft:"none",
+                background:fi===af?C.orange:"#F8FAFC",
+                color:fi===af?"rgba(255,255,255,0.8)":C.red,transition:"all 0.15s",lineHeight:1}}>
+              ✕
+            </button>}
+          </div>;
         })}
         <button onClick={addFloor}
           style={{padding:"5px 14px",minHeight:32,borderRadius:20,fontSize:11,fontWeight:700,cursor:"pointer",
@@ -1705,16 +1792,26 @@ function MeasurementHeader({ project, floor, room, af, ar, setAf, setAr, upRoom,
       <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
         {(safeFloor.rooms || []).map((r,ri)=>{
           const rc2=calcRoom(r); const net2=calcNet(r); const sel=ri===ar;
-          return <button key={r.id || ri} onClick={()=>setAr(ri)}
-            style={{padding:"6px 12px",borderRadius:20,fontSize:11,fontWeight:700,cursor:"pointer",
-              border:`2px solid ${sel?C.navy:C.border}`,
-              background:sel?C.navy:"#F8FAFC",color:sel?"#fff":C.gray,
-              transition:"all 0.15s",textAlign:"left"}}>
-            <div>{r.type==="Custom"?(r.customType||"Custom"):r.type}{r.condition!=="Good"?" ⚠":""}</div>
-            <div style={{fontSize:9,fontWeight:600,color:sel?"rgba(255,255,255,0.65)":C.orange,marginTop:1}}>
-              {net2>0?`${inr(withMat?rc2.total:rc2.labEx)} · ${net2.toFixed(0)}sf`:"tap to measure"}
-            </div>
-          </button>;
+          const canRemoveRoom = (safeFloor.rooms || []).length > 1;
+          return <div key={r.id || ri} style={{display:"inline-flex",alignItems:"stretch",gap:0}}>
+            <button onClick={()=>setAr(ri)}
+              style={{padding:"6px 12px",borderRadius:"20px 0 0 20px",fontSize:11,fontWeight:700,cursor:"pointer",
+                border:`2px solid ${sel?C.navy:C.border}`,
+                background:sel?C.navy:"#F8FAFC",color:sel?"#fff":C.gray,
+                transition:"all 0.15s",textAlign:"left"}}>
+              <div>{r.type==="Custom"?(r.customType||"Custom"):r.type}{r.condition!=="Good"?" ⚠":""}</div>
+              <div style={{fontSize:9,fontWeight:600,color:sel?"rgba(255,255,255,0.65)":C.orange,marginTop:1}}>
+                {net2>0?`${inr(withMat?rc2.total:rc2.labEx)} · ${net2.toFixed(0)}sf`:"tap to measure"}
+              </div>
+            </button>
+            {canRemoveRoom && <button onClick={(e)=>{e.stopPropagation();removeRoom(ri);}}
+              style={{padding:"0 8px",borderRadius:"0 20px 20px 0",fontSize:11,fontWeight:800,cursor:"pointer",
+                border:`2px solid ${sel?C.navy:C.border}`,borderLeft:"none",
+                background:sel?C.navy:"#F8FAFC",
+                color:sel?"rgba(255,255,255,0.8)":C.red,transition:"all 0.15s",lineHeight:1}}>
+              ✕
+            </button>}
+          </div>;
         })}
         <button onClick={addRoom}
           style={{padding:"6px 14px",minHeight:32,borderRadius:20,fontSize:11,fontWeight:700,cursor:"pointer",
@@ -9125,8 +9222,8 @@ loadAllProjects().then(projects => {
   const qShowTX2Texture = typeof calcTexture === "function" ? (calcTexture(project?.TX2_textureItems || []).total || 0) > 0 : false;
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 200, display: "flex", alignItems: "flex-end", justifyCenter: "center" }} onClick={() => setShowQuote(false)}>
-      <div onClick={e => e.stopPropagation()} style={{ background: C.white, borderRadius: "20px 20px 0 0", padding: "22px 18px 36px", width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto" }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }} onClick={() => setShowQuote(false)}>
+      <div onClick={e => e.stopPropagation()} style={{ background: C.white, borderRadius: "20px", padding: "22px 18px 36px", width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
         
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
