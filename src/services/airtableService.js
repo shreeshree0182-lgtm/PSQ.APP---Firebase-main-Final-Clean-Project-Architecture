@@ -179,6 +179,33 @@ function calcExteriorNet(exteriorArr) {
 
 // ─── 1. PROJECTS TABLE ──────────────────────────────────────────
 
+// Allowlist of confirmed Airtable Projects table column names.
+// Any key not in this set is stripped before the API call to prevent
+// 422 "Unknown field name" errors.
+const PROJECTS_TABLE_FIELDS = new Set([
+  "Project ID",
+  "Project Name",
+  "Supervisor Name",
+  "Category",
+  "Type",
+  "Quote Mode",
+  "Grand Total Amount",
+  "JSON Backup",
+  "Customer",
+]);
+
+function sanitizeToSchema(fields, allowlist) {
+  const cleaned = {};
+  Object.keys(fields).forEach((key) => {
+    const v = fields[key];
+    if (!allowlist.has(key)) return;
+    if (v !== undefined && v !== null && v !== "") {
+      cleaned[key] = v;
+    }
+  });
+  return cleaned;
+}
+
 export function buildProjectFields(projectData, user, pdfUrl = null) {
   const cust = projectData.customer || {};
   const clientName = cust.name || cust.fullName || projectData.clientName || "";
@@ -187,25 +214,23 @@ export function buildProjectFields(projectData, user, pdfUrl = null) {
   const supervisorName = user?.name || user?.displayName || projectData?.supervisorName || "Unknown";
   const supervisorId = projectData?.supervisorId || user?.cardId || "";
 
+  // Fold supervisor ID into the single "Supervisor Name" column since the
+  // Airtable Projects table has no "Supervisor ID" field.
+  const supervisorDisplay = supervisorId
+    ? `${supervisorName} (${supervisorId})`
+    : supervisorName;
+
   const projectId = generateCleanProjectId();
 
-  // Warranty fields — pulled from projectData (set by the UI) or defaults
-  const warranty = projectData?.warranty || {};
-  const warrantyStartDate = warranty.startDate || "";
-  const warrantyEndDate = warranty.endDate || "";
-  const warrantyStatus = warranty.status || (warrantyStartDate && warrantyEndDate ? "Active" : "");
-
   return {
-    fields: cleanPayload({
-      "Project ID": projectId,
-      "Project Name": projectName,
-      "Supervisor Name": supervisorName,
-      "Supervisor ID": supervisorId,
-      "Warranty Start Date": warrantyStartDate || undefined,
-      "Warranty End Date": warrantyEndDate || undefined,
-      "Warranty Status": warrantyStatus || undefined,
-      "PDF File": pdfUrl || undefined,
-    }),
+    fields: sanitizeToSchema(
+      {
+        "Project ID": projectId,
+        "Project Name": projectName,
+        "Supervisor Name": supervisorDisplay,
+      },
+      PROJECTS_TABLE_FIELDS
+    ),
     projectId,
   };
 }
@@ -638,16 +663,19 @@ export async function saveToAirtable(serializedData, projectData = {}, user = nu
     const { fields: projectFields, projectId } = buildProjectFields(projectData, user, pdfUrl);
 
     // Attach customer link + JSON backup + legacy fields for backward compat.
-    // Only include keys that are confirmed Airtable Projects columns.
-    const fullProjectFields = cleanPayload({
-      ...projectFields,
-      "Category": serializedData.projectInfo?.category || projectData.projectCategory || projectData.category || "Residential House",
-      "Type": serializedData.projectInfo?.type || projectData.projectType || projectData.type || "Fresh Painting",
-      "Quote Mode": serializedData.projectInfo?.quoteMode || projectData.quoteMode || "Labour Only",
-      "Grand Total Amount": formatIndianCurrency(Number(serializedData.summaryMetrics?.grandTotal || serializedData.grandTotal || 0)),
-      "JSON Backup": JSON.stringify(serializedData),
-      "Customer": customerRecordId ? [customerRecordId] : undefined,
-    });
+    // Sanitized through the Projects table allowlist to prevent 422 errors.
+    const fullProjectFields = sanitizeToSchema(
+      {
+        ...projectFields,
+        "Category": serializedData.projectInfo?.category || projectData.projectCategory || projectData.category || "Residential House",
+        "Type": serializedData.projectInfo?.type || projectData.projectType || projectData.type || "Fresh Painting",
+        "Quote Mode": serializedData.projectInfo?.quoteMode || projectData.quoteMode || "Labour Only",
+        "Grand Total Amount": formatIndianCurrency(Number(serializedData.summaryMetrics?.grandTotal || serializedData.grandTotal || 0)),
+        "JSON Backup": JSON.stringify(serializedData),
+        "Customer": customerRecordId ? [customerRecordId] : undefined,
+      },
+      PROJECTS_TABLE_FIELDS
+    );
 
     const newProject = await airtableFetch("Projects", {
       method: "POST",
