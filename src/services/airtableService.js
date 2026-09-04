@@ -177,6 +177,32 @@ function calcExteriorNet(exteriorArr) {
   }, 0);
 }
 
+/**
+ * Aggregates all joinery / wood-metal items into a single summary string.
+ * e.g. "3x Doors (67 sqft total), 2x Windows (40 sqft total)"
+ */
+function formatJoinerySummary(serializedData) {
+  const items = serializedData.woodAndMetalItems || serializedData.doorWindowItems || [];
+  if (!Array.isArray(items) || items.length === 0) return "";
+
+  const groups = {};
+  for (const item of items) {
+    const label = (item.itemType || item.customLabel || item.kind || "Item").trim();
+    const display = label.charAt(0).toUpperCase() + label.slice(1);
+    const sqft = Number(item.dimensions?.totalSqft || item.totalSqft || item.area || 0);
+    if (!groups[display]) groups[display] = { count: 0, area: 0 };
+    groups[display].count += 1;
+    groups[display].area += sqft;
+  }
+
+  return Object.entries(groups)
+    .map(([label, g]) => {
+      const areaPart = g.area > 0 ? ` (${g.area.toFixed(2)} sqft total)` : "";
+      return `${g.count}x ${label}${areaPart}`;
+    })
+    .join(", ");
+}
+
 // ─── 1. PROJECTS TABLE ──────────────────────────────────────────
 
 // Allowlist of confirmed Airtable Projects table column names.
@@ -269,30 +295,28 @@ export function buildProjectFields(projectData, user, pdfUrl = null) {
 
 export function buildMeasurementRecords(serializedData, projectRecordId) {
   const records = [];
+  const joinerySummary = formatJoinerySummary(serializedData);
 
-  // Interior rooms
+  // Collect interior room entries
+  const interiorEntries = [];
   const floors = Array.isArray(serializedData.floors) ? serializedData.floors : [];
   floors.forEach((f) => {
     const rooms = Array.isArray(f.rooms) ? f.rooms : [];
     rooms.forEach((r) => {
       const netArea = calcRoomNetSqft(r);
       if (netArea > 0 || r.roomType || r.type) {
-        records.push({
-          fields: cleanPayload({
-            "Measurement ID": genMeasurementId(),
-            "Project": [projectRecordId],
-            "Scope": "Interior",
-            "Floor Name": String(f.floorName || f.name || "Ground Floor").trim(),
-            "Room Name": String(r.roomType || r.roomName || r.name || r.type || "Room").trim(),
-            "Interior Area Sqft": Number(netArea.toFixed(2)),
-            "Finishing Steps Details": formatFinishingSteps(r.finishingSteps || r.steps),
-          }),
+        interiorEntries.push({
+          floorName: String(f.floorName || f.name || "Ground Floor").trim(),
+          roomName: String(r.roomType || r.roomName || r.name || r.type || "Room").trim(),
+          area: Number(netArea.toFixed(2)),
+          finishing: formatFinishingSteps(r.finishingSteps || r.steps),
         });
       }
     });
   });
 
-  // Exterior sides
+  // Collect exterior side entries
+  const exteriorEntries = [];
   const exteriorSides =
     serializedData.exteriorWork?.sides ||
     serializedData.exteriorSides ||
@@ -302,24 +326,40 @@ export function buildMeasurementRecords(serializedData, projectRecordId) {
     exteriorSides.forEach((s) => {
       const sideArea = Number(s.netSqft || s.totalSqft || s.area || 0);
       if (sideArea > 0 || s.sideName || s.name) {
-        records.push({
-          fields: cleanPayload({
-            "Measurement ID": genMeasurementId(),
-            "Project": [projectRecordId],
-            "Scope": "Exterior",
-            "Elevation Name": String(s.sideName || s.name || "Elevation Side").trim(),
-            "Exterior Area Sqft": Number(sideArea.toFixed(2)),
-            "Finishing Steps Details": formatFinishingSteps(s.finishingSteps),
-          }),
+        exteriorEntries.push({
+          elevationName: String(s.sideName || s.name || "Elevation Side").trim(),
+          area: Number(sideArea.toFixed(2)),
+          finishing: formatFinishingSteps(s.finishingSteps),
         });
       }
     });
   }
 
-  // NOTE: Wood/Metal, Wallpaper, and Texture scopes are NOT included in the
-  // Measurements table — they belong in the Joinery table and the
-  // "Wallpaper and Texture" table respectively. The Measurements table
-  // strictly handles Interior and Exterior only.
+  // Build unified side-by-side records — pair interior and exterior by index
+  // on the same row to minimize record count.
+  const maxLen = Math.max(interiorEntries.length, exteriorEntries.length);
+  for (let i = 0; i < maxLen; i++) {
+    const intEntry = interiorEntries[i] || null;
+    const extEntry = exteriorEntries[i] || null;
+
+    const scope = intEntry && extEntry ? "Interior + Exterior" : intEntry ? "Interior" : "Exterior";
+
+    records.push({
+      fields: cleanPayload({
+        "Measurement ID": genMeasurementId(),
+        "Project": [projectRecordId],
+        "Scope": scope,
+        "Floor Name": intEntry?.floorName || "",
+        "Room Name": intEntry?.roomName || "",
+        "Interior Area Sqft": intEntry?.area || "",
+        "Elevation Name": extEntry?.elevationName || "",
+        "Exterior Area Sqft": extEntry?.area || "",
+        "Finishing Steps Details":
+          [intEntry?.finishing, extEntry?.finishing].filter(Boolean).join(" | ") || "",
+        "Joinery Details": joinerySummary || "",
+      }),
+    });
+  }
 
   return records;
 }
@@ -383,6 +423,16 @@ export function buildFeatureRecords(serializedData, projectRecordId) {
 }
 
 // ─── 4. MATERIAL BOQ TABLE ──────────────────────────────────────
+
+const BOQ_TABLE_FIELDS = new Set([
+  "BOQ ID",
+  "Project",
+  "Category",
+  "Brand",
+  "Product Line",
+  "Total Quantity",
+  "Unit",
+]);
 
 /**
  * Auto-calculates material BOQ entries from total measurements.
@@ -456,71 +506,48 @@ export function buildBoqRecords(serializedData, projectRecordId) {
   const extPkg = serializedData.exteriorWork?.package || "premium";
   const extProduct = BRAND_PRODUCTS_MAP[extBrandKey]?.exterior?.[extPkg] || extPkg;
 
+  const addBoq = (category, brand, productLine, qty, unit) => {
+    records.push({
+      fields: sanitizeToSchema(
+        {
+          "BOQ ID": genBoqId(),
+          "Project": [projectRecordId],
+          "Category": category,
+          "Brand": brand,
+          "Product Line": productLine,
+          "Total Quantity": Number(qty),
+          "Unit": unit,
+        },
+        BOQ_TABLE_FIELDS
+      ),
+    });
+  };
+
   // Interior Paint
   if (interiorArea > 0) {
     const coats = 2;
     const liters = Math.ceil((interiorArea * coats) / COVERAGE.paint);
-    records.push({
-      fields: cleanPayload({
-        "BOQ ID": genBoqId(),
-        "Project": [projectRecordId],
-        "Category": "Interior Paint",
-        "Brand": intBrandName,
-        "Product Line": `${intProduct} (${liters} L)`,
-        "Total Quantity": Number(liters),
-        "Unit": "Liters",
-      }),
-    });
+    addBoq("Interior Paint", intBrandName, `${intProduct} (${liters} L)`, liters, "Liters");
   }
 
   // Exterior Paint
   if (exteriorArea > 0) {
     const coats = 2;
     const liters = Math.ceil((exteriorArea * coats) / COVERAGE.paint);
-    records.push({
-      fields: cleanPayload({
-        "BOQ ID": genBoqId(),
-        "Project": [projectRecordId],
-        "Category": "Exterior Paint",
-        "Brand": extBrandName,
-        "Product Line": `${extProduct} (${liters} L)`,
-        "Total Quantity": Number(liters),
-        "Unit": "Liters",
-      }),
-    });
+    addBoq("Exterior Paint", extBrandName, `${extProduct} (${liters} L)`, liters, "Liters");
   }
 
   // Putty (interior + exterior)
   const puttyArea = interiorArea + exteriorArea;
   if (puttyArea > 0) {
     const kg = Math.ceil(puttyArea / COVERAGE.putty);
-    records.push({
-      fields: cleanPayload({
-        "BOQ ID": genBoqId(),
-        "Project": [projectRecordId],
-        "Category": "Putty",
-        "Brand": intBrandName,
-        "Product Line": `Wall Care Putty (${kg} Kg)`,
-        "Total Quantity": Number(kg),
-        "Unit": "Kg",
-      }),
-    });
+    addBoq("Putty", intBrandName, `Wall Care Putty (${kg} Kg)`, kg, "Kg");
   }
 
   // Primer (interior + exterior)
   if (puttyArea > 0) {
     const liters = Math.ceil(puttyArea / COVERAGE.primer);
-    records.push({
-      fields: cleanPayload({
-        "BOQ ID": genBoqId(),
-        "Project": [projectRecordId],
-        "Category": "Primer",
-        "Brand": intBrandName,
-        "Product Line": `Primer (${liters} L)`,
-        "Total Quantity": Number(liters),
-        "Unit": "Liters",
-      }),
-    });
+    addBoq("Primer", intBrandName, `Primer (${liters} L)`, liters, "Liters");
   }
 
   // Wallpaper
@@ -528,34 +555,14 @@ export function buildBoqRecords(serializedData, projectRecordId) {
     const rollArea = 0.53 * 10;
     const rolls = Math.ceil(wallpaperArea / rollArea);
     const wpBrand = (serializedData.specialFeatures?.wallpapers || serializedData.wallpaperItems || [])[0]?.brand || "Standard";
-    records.push({
-      fields: cleanPayload({
-        "BOQ ID": genBoqId(),
-        "Project": [projectRecordId],
-        "Category": "Wallpaper",
-        "Brand": wpBrand,
-        "Product Line": `Wallpaper Roll (${rolls} rolls)`,
-        "Total Quantity": Number(rolls),
-        "Unit": "Rolls",
-      }),
-    });
+    addBoq("Wallpaper", wpBrand, `Wallpaper Roll (${rolls} rolls)`, rolls, "Rolls");
   }
 
   // Texture
   if (textureArea > 0) {
     const kg = Math.ceil(textureArea / COVERAGE.putty);
     const texBrand = (serializedData.specialFeatures?.textures || serializedData.textureItems || serializedData.TX2_textureItems || [])[0]?.brand || "Standard";
-    records.push({
-      fields: cleanPayload({
-        "BOQ ID": genBoqId(),
-        "Project": [projectRecordId],
-        "Category": "Texture",
-        "Brand": texBrand,
-        "Product Line": `Texture Compound (${kg} Kg)`,
-        "Total Quantity": Number(kg),
-        "Unit": "Kg",
-      }),
-    });
+    addBoq("Texture", texBrand, `Texture Compound (${kg} Kg)`, kg, "Kg");
   }
 
   return records;
