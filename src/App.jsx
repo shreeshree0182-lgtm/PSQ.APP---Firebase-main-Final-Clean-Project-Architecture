@@ -285,9 +285,9 @@ const PROJECT_CATEGORIES = [
   { id:"other",        label:"Other",               icon:"📌" },
 ];
 const USERS = [
-  { cardId:"SUP001", pin:"1234", mobile:"9876543210", name:"Rahul Sharma", role:"Senior Supervisor", isAdmin:false },
-  { cardId:"SUP002", pin:"5678", mobile:"9876543211", name:"Anjali Mehta",  role:"Site Supervisor",  isAdmin:false },
-  { cardId:"ADM001", pin:"9999", mobile:"9876543212", name:"Admin User",    role:"Admin",            isAdmin:true  },
+  { cardId:"PS-ADM-01", pin:"981245", mobile:"9876543210", name:"Admin User",      role:"Admin",              isAdmin:true  },
+  { cardId:"PS-SUP-101", pin:"450912", mobile:"9876543211", name:"Rahul Sharma",  role:"Senior Supervisor", isAdmin:false },
+  { cardId:"PS-SUP-102", pin:"671239", mobile:"9876543212", name:"Anjali Mehta",   role:"Site Supervisor",   isAdmin:false },
 ];
 
 // ─── OTP AUTH ADAPTER — Firebase Phone Authentication ──────────────────
@@ -6678,7 +6678,7 @@ function LoginScreen({ onLogin }) {
     <div style={{width:"100%",maxWidth:400}}>
       <div style={{textAlign:"center",marginBottom:32}}>
         <div style={{display:"flex",justifyContent:"center"}}>
-          <img src="/Paintship W-W-Logo (5).png" alt="PaintShip — Richest Homes Painting Service" style={{width:280,maxWidth:"85%",height:"auto",objectFit:"contain",display:"block"}}/>
+          <img src="/PSQ-Logo.png" alt="PSQ" style={{width:280,maxWidth:"85%",height:"auto",objectFit:"contain",display:"block"}}/>
         </div>
       </div>
       <div style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:20,padding:"28px 24px",boxShadow:"0 24px 56px rgba(0,0,0,0.45)"}}>
@@ -6719,7 +6719,7 @@ function LoginScreen({ onLogin }) {
         </> : <>
           <div style={{marginBottom:14}}>
             <label style={{fontSize:10,color:C.gold,fontWeight:700,letterSpacing:"0.1em",display:"block",marginBottom:6,textTransform:"uppercase"}}>Employee ID</label>
-            <input value={cardId} onChange={e=>setCardId(e.target.value)} placeholder="e.g. SUP001" disabled={locked} style={inp} onFocus={e=>e.target.style.borderColor=C.gold} onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.15)"}/>
+            <input value={cardId} onChange={e=>setCardId(e.target.value)} placeholder="e.g. PS-ADM-01" disabled={locked} style={inp} onFocus={e=>e.target.style.borderColor=C.gold} onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.15)"}/>
           </div>
           <div style={{marginBottom:14}}>
             <label style={{fontSize:10,color:C.gold,fontWeight:700,letterSpacing:"0.1em",display:"block",marginBottom:6,textTransform:"uppercase"}}>PIN</label>
