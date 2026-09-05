@@ -54,7 +54,7 @@ export default function FinishingModule({ finishing, onChange, net, visibleKeys=
             <span style={{fontSize:11,color:"#c97a40",fontWeight:600}}>{area.toFixed(1)} sf × ₹{f.rate||0} × {f.coats||1}</span>
             <span style={{fontSize:15,fontWeight:800,color:C.orange}}>₹{cost.toFixed(0)}</span>
           </div>
-          {CONSUMPTION_ENABLED.includes(key)&&<ConsumptionPanel f={f} net={net} onChange={upd=>onChange({...finishing,[key]:upd})}/>}
+          {CONSUMPTION_ENABLED.includes(key)&&<ConsumptionPanel f={f} net={net} onChange={upd=>onChange({...finishing,[key]:upd})} finKey={key}/>}
         </div>}
       </div>;
     })}
