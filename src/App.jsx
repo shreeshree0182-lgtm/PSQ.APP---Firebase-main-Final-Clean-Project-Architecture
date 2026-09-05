@@ -1696,7 +1696,7 @@ function ExteriorFinishingModule({ finishing, onChange, net, locked=false, paint
         {!f.useRoom&&<div style={{marginBottom:12}}><span style={LBL}>Custom Area (sf)</span><NumInp small value={f.area||0} onChange={v=>upF(key,"area",v)} disabled={locked}/></div>}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
           <div><span style={LBL}>Rate (₹/sf){locked?" 🔒":""}</span><NumInp small prefix="₹" value={f.rate||0} onChange={v=>upF(key,"rate",v)} disabled={locked}/></div>
-          <div><span style={LBL}>Coats</span><CoatStepper value={f.coats||1} onChange={v=>upF(key,"coats",v)} disabled={locked}/></div>
+          <div><span style={LBL}>Coats</span><CoatStepper value={f.coats||1} onChange={v=>upF(key,"coats",v)} /></div>
         </div>
         <div style={{background:"#F0FDFA",borderRadius:10,padding:"10px 14px",marginTop:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <span style={{fontSize:11,color:"#0D9488",fontWeight:600}}>{area.toFixed(1)} sf × ₹{f.rate||0} × {f.coats||1}</span>
@@ -5573,7 +5573,7 @@ function ExteriorMaterialPanel({ config, onChange, quoteMode, extNet, paintingTy
       </button>
 
       {showFinishing&&<div style={{marginTop:22}}>
-        <ExteriorFinishingModule finishing={finishing} onChange={fin=>onChange({...config,finishing:fin})} net={extNet||0} paintingType={paintingType}/>
+        <ExteriorFinishingModule finishing={finishing} onChange={fin=>onChange({...config,finishing:fin})} net={extNet||0} paintingType={paintingType} locked={isFinishesLocked}/>
       </div>}
     </div>
 
@@ -8896,7 +8896,10 @@ loadAllProjects().then(projects => {
                   {/* Part 7 — Exterior & Finishing Total (existing values, no new formulas) */}
                   {(()=>{
                     const textureTypes=getExtFinMeta().texture?.types||[];
-                    const finishTypeLabel=textureTypes.find(t=>t.id===finishing.texture?.type)?.label||"—";
+                    const paintTypes=getExtFinMeta().paint?.types||[];
+                    const paintTypeLabel=paintTypes.find(t=>t.id===finishing.paint?.type)?.label||"—";
+                    const textureTypeLabel=textureTypes.find(t=>t.id===finishing.texture?.type)?.label||"";
+                    const finishTypeLabel = finishing.texture?.on ? textureTypeLabel : paintTypeLabel;
                     const paintCoats=finishing.paint?.coats||1;
                     return <div style={{background:C.white,borderRadius:16,padding:"28px 26px",border:`1px solid ${C.border}`,boxShadow:"0 1px 2px rgba(15,30,60,0.05), 0 6px 16px rgba(15,30,60,0.06)"}}>
                       <div style={{fontSize:13,fontWeight:800,color:C.navy,marginBottom:28,letterSpacing:"0.02em"}}>Exterior &amp; Finishing Total</div>
