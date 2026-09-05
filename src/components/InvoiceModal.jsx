@@ -190,7 +190,7 @@ export default function InvoiceModal({ project, totals, onClose }) {
     else setPaymentStatus("UNPAID");
   }, [previouslyReceived, data.grandTotal]);
 
-  const companyLogo = "/Paintship B-Logo.png";
+  const companyLogo = "/PaintShip B W Logo.png";
   const companyAddr = companyAddress || "123 Corporate Plaza, MG Road, Mumbai - 400001, Maharashtra";
 
   return (
@@ -208,23 +208,23 @@ export default function InvoiceModal({ project, totals, onClose }) {
           minHeight: "297mm",
           maxHeight: "297mm",
           boxSizing: "border-box",
-          padding: "40px 48px",
+          padding: "24px 32px",
           background: "#fff",
           border: "1px solid #E2E8F0",
           overflow: "hidden",
           margin: "0 auto",
           color: "#0F172A",
           fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-          fontSize: "12px",
-          lineHeight: 1.5,
+          fontSize: "11px",
+          lineHeight: 1.35,
         }}>
 
           {/* === A. TOP HEADER GRID: Logo+Address (Left) | Invoice Metadata (Right) === */}
-          <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "32px", paddingBottom: "24px", marginBottom: "24px", borderBottom: "1px solid #E2E8F0" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "24px", paddingBottom: "14px", marginBottom: "14px", borderBottom: "1px solid #E2E8F0" }}>
             {/* Left: Company Logo + Address */}
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-                <img src={companyLogo} alt="PaintShip" crossOrigin="anonymous" style={{ height: 42, width: "auto", objectFit: "contain", flexShrink: 0 }} />
+                <img src={companyLogo} alt="PaintShip" crossOrigin="anonymous" style={{ width: 170, height: "auto", objectFit: "contain", flexShrink: 0 }} />
                 <div style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
                   <div style={{ fontSize: 20, fontWeight: 700, color: "#0F1E3C", lineHeight: 1.2 }}>{companyName}</div>
                   <div style={{ fontSize: 10, color: "#64748B", fontWeight: 500, letterSpacing: "0.02em", lineHeight: 1.4, textTransform: "uppercase" }}>Head Office / Operations</div>
@@ -266,16 +266,16 @@ export default function InvoiceModal({ project, totals, onClose }) {
           </div>
 
           {/* === B. BILLING METADATA BLOCK === */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "32px" }}>
-            <div style={{ border: "1px solid #E2E8F0", borderRadius: "8px", padding: "16px", background: "#FAFBFC" }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: "#0F1E3C", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "8px" }}>Billed To / Billing Address</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
+            <div style={{ border: "1px solid #E2E8F0", borderRadius: "8px", padding: "10px 12px", background: "#FAFBFC" }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: "#0F1E3C", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "6px" }}>Billed To / Billing Address</div>
               <div style={{ fontSize: 14, fontWeight: 600, color: "#0F172A" }}>{cust.name || "Valued Client"}</div>
               <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.5, marginTop: "4px" }}>{(customerBillingAddress || cust.address || "Site Address As Per Job Details")}</div>
               <div style={{ fontSize: 12, color: "#475569", marginTop: "4px" }}>{(cust.location || cust.pincode) ? `${cust.location || ""} ${cust.pincode ? `— ${cust.pincode}` : ""}` : ""}</div>
               <div style={{ fontSize: 12, color: "#475569", marginTop: "4px" }}>{cust.mobile ? `Mob: ${cust.mobile}` : ""}</div>
             </div>
-            <div style={{ border: "1px solid #E2E8F0", borderRadius: "8px", padding: "16px", background: "#FAFBFC" }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: "#0F1E3C", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "8px" }}>Shipping / Site Address</div>
+            <div style={{ border: "1px solid #E2E8F0", borderRadius: "8px", padding: "10px 12px", background: "#FAFBFC" }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: "#0F1E3C", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "6px" }}>Shipping / Site Address</div>
               <div style={{ fontSize: 14, fontWeight: 600, color: "#0F172A" }}>Project Site</div>
               <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.5, marginTop: "4px" }}>{(customerShippingAddress || cust.address || "Site Address As Per Job Details")}</div>
               <div style={{ fontSize: 12, color: "#475569", marginTop: "4px" }}>{(cust.location || cust.pincode) ? `${cust.location || ""} ${cust.pincode ? `— ${cust.pincode}` : ""}` : ""}</div>
@@ -284,7 +284,7 @@ export default function InvoiceModal({ project, totals, onClose }) {
           </div>
 
           {/* Project Details Strip */}
-          <div style={{ display: "flex", gap: "24px", flexWrap: "wrap", marginBottom: "32px", fontSize: "12px", color: "#475569" }}>
+          <div style={{ display: "flex", gap: "20px", flexWrap: "wrap", marginBottom: "16px", fontSize: "11px", color: "#475569" }}>
             <span><b style={{ color: "#0F1E3C" }}>Category:</b> {category}</span>
             <span><b style={{ color: "#0F1E3C" }}>Type:</b> {projectType}</span>
             <span><b style={{ color: "#0F1E3C" }}>Scope:</b> {scope}</span>
@@ -293,29 +293,29 @@ export default function InvoiceModal({ project, totals, onClose }) {
           </div>
 
           {/* === C. ITEMIZED COST TABLE === */}
-          <div style={{ marginBottom: "32px", overflowX: "auto" }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", padding: "8px 12px", background: "#0F1E3C" }}>Itemized Cost Breakdown</div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px", border: "1px solid #0F1E3C" }}>
+          <div style={{ marginBottom: "16px", overflowX: "auto", pageBreakInside: "avoid" }}>
+            <div style={{ fontSize: 10, fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", padding: "6px 10px", background: "#0F1E3C" }}>Itemized Cost Breakdown</div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px", border: "1px solid #0F1E3C", pageBreakInside: "avoid" }}>
               <thead>
                 <tr style={{ background: "#F8FAFC" }}>
                   {["#", "Item / Scope", "Area (sq ft)", "Rate (₹)", "Taxable Value (₹)", "Tax Amount (₹)", "Total Amount (₹)"].map(h => (
-                    <th key={h} style={{ padding: "10px 12px", textAlign: h === "Item / Scope" ? "left" : "right", fontSize: 10, fontWeight: 600, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.03em", borderBottom: "1px solid #0F1E3C", whiteSpace: "nowrap" }}>{h}</th>
+                    <th key={h} style={{ padding: "6px 8px", textAlign: h === "Item / Scope" ? "left" : "right", fontSize: 9, fontWeight: 600, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.03em", borderBottom: "1px solid #0F1E3C", whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {data.itemRows.length === 0 && (
-                  <tr><td colSpan={7} style={{ padding: "24px", textAlign: "center", color: "#64748B", border: "1px solid #0F1E3C" }}>No scope data available.</td></tr>
+                  <tr><td colSpan={7} style={{ padding: "16px", textAlign: "center", color: "#64748B", border: "1px solid #0F1E3C" }}>No scope data available.</td></tr>
                 )}
                 {data.itemRows.map((r, i) => (
                   <tr key={i} style={{ borderBottom: "1px solid #F1F5F9", background: i % 2 ? "#FAFBFC" : "#fff" }}>
-                    <td style={{ padding: "10px 12px", textAlign: "center", fontWeight: 500, color: "#64748B", border: "1px solid #F1F5F9" }}>{r.sr}</td>
-                    <td style={{ padding: "10px 12px", fontWeight: 500, color: "#0F172A", whiteSpace: "nowrap", border: "1px solid #F1F5F9" }}>{r.item}</td>
-                    <td style={{ padding: "10px 12px", textAlign: "right", color: "#334155", border: "1px solid #F1F5F9" }}>{fmt2(r.area)}</td>
-                    <td style={{ padding: "10px 12px", textAlign: "right", color: "#334155", border: "1px solid #F1F5F9" }}>{fmt(r.rate)}</td>
-                    <td style={{ padding: "10px 12px", textAlign: "right", color: "#334155", border: "1px solid #F1F5F9" }}>{fmt(r.taxableValue)}</td>
-                    <td style={{ padding: "10px 12px", textAlign: "right", color: "#334155", border: "1px solid #F1F5F9" }}>{fmt(r.taxAmount)}</td>
-                    <td style={{ padding: "10px 12px", textAlign: "right", fontWeight: 600, color: "#0F172A", border: "1px solid #F1F5F9" }}>{fmt(r.totalAmount)}</td>
+                    <td style={{ padding: "6px 8px", textAlign: "center", fontWeight: 500, color: "#64748B", border: "1px solid #F1F5F9" }}>{r.sr}</td>
+                    <td style={{ padding: "6px 8px", fontWeight: 500, color: "#0F172A", whiteSpace: "nowrap", border: "1px solid #F1F5F9" }}>{r.item}</td>
+                    <td style={{ padding: "6px 8px", textAlign: "right", color: "#334155", border: "1px solid #F1F5F9" }}>{fmt2(r.area)}</td>
+                    <td style={{ padding: "6px 8px", textAlign: "right", color: "#334155", border: "1px solid #F1F5F9" }}>{fmt(r.rate)}</td>
+                    <td style={{ padding: "6px 8px", textAlign: "right", color: "#334155", border: "1px solid #F1F5F9" }}>{fmt(r.taxableValue)}</td>
+                    <td style={{ padding: "6px 8px", textAlign: "right", color: "#334155", border: "1px solid #F1F5F9" }}>{fmt(r.taxAmount)}</td>
+                    <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600, color: "#0F172A", border: "1px solid #F1F5F9" }}>{fmt(r.totalAmount)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -323,9 +323,9 @@ export default function InvoiceModal({ project, totals, onClose }) {
           </div>
 
           {/* === D. FINANCIAL SUMMARY === */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "32px" }}>
-            <div style={{ border: "1px solid #E2E8F0", borderRadius: "8px", padding: "16px", background: "#FAFBFC" }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: "#0F1E3C", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "12px" }}>Financial Summary</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px", pageBreakInside: "avoid" }}>
+            <div style={{ border: "1px solid #E2E8F0", borderRadius: "8px", padding: "10px 12px", background: "#FAFBFC" }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: "#0F1E3C", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "8px" }}>Financial Summary</div>
               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
                   <span style={{ fontSize: 12, color: "#475569" }}>Subtotal</span>
@@ -363,8 +363,8 @@ export default function InvoiceModal({ project, totals, onClose }) {
               </div>
             </div>
 
-            <div style={{ border: "1px solid #0F1E3C", borderRadius: "8px", padding: "16px", background: "#FAFBFC" }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", padding: "6px 10px", background: "#0F1E3C", display: "inline-block", marginBottom: "12px" }}>Multi-Stage Payment Ledger</div>
+            <div style={{ border: "1px solid #0F1E3C", borderRadius: "8px", padding: "10px 12px", background: "#FAFBFC" }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: "#fff", textTransform: "uppercase", letterSpacing: "0.04em", padding: "5px 8px", background: "#0F1E3C", display: "inline-block", marginBottom: "8px" }}>Multi-Stage Payment Ledger</div>
               <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "16px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
                   <span style={{ fontSize: 12, color: "#475569" }}>Total Project Quotation</span>
@@ -410,13 +410,13 @@ export default function InvoiceModal({ project, totals, onClose }) {
           </div>
 
           {/* Amount in Words */}
-          <div style={{ marginBottom: "24px", padding: "12px 16px", background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: "6px" }}>
-            <div style={{ fontSize: 10, fontWeight: 600, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "4px" }}>Total Amount in Words (INR)</div>
+          <div style={{ marginBottom: "14px", padding: "8px 12px", background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: "6px", pageBreakInside: "avoid" }}>
+            <div style={{ fontSize: 9, fontWeight: 600, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "3px" }}>Total Amount in Words (INR)</div>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#0F172A" }}>{amountInWords}</div>
           </div>
 
 {/* === E. FOOTER: Bank Details | UPI QR | Signatory === */}
-          <div style={{ borderTop: "1px solid #E2E8F0", paddingTop: "20px", display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr", gap: "24px", alignItems: "flex-end" }}>
+          <div style={{ borderTop: "1px solid #E2E8F0", paddingTop: "12px", display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr", gap: "16px", alignItems: "flex-end", pageBreakInside: "avoid" }}>
             {/* Bank Details (Left) */}
             <div style={{ fontSize: 11, color: "#475569", lineHeight: 1.6 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: "#0F1E3C", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "10px" }}>Bank Details</div>
@@ -469,8 +469,8 @@ export default function InvoiceModal({ project, totals, onClose }) {
           </div>
 
           {/* Terms */}
-          <div style={{ borderTop: "1px solid #E2E8F0", paddingTop: "16px", marginTop: "20px", fontSize: 10, color: "#64748B", lineHeight: 1.6 }}>
-            <div style={{ fontSize: 10, fontWeight: 600, color: "#0F1E3C", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "6px" }}>Terms & Conditions</div>
+          <div style={{ borderTop: "1px solid #E2E8F0", paddingTop: "10px", marginTop: "12px", fontSize: 9, color: "#64748B", lineHeight: 1.4, pageBreakInside: "avoid" }}>
+            <div style={{ fontSize: 9, fontWeight: 600, color: "#0F1E3C", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "4px" }}>Terms & Conditions</div>
             <div>Payment due as per the staged schedule above. Work commences upon receipt of advance payment. Any additional scope will be billed separately. This is a computer-generated invoice and does not require a signature.</div>
           </div>
         </div>

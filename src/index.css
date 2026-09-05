@@ -30,7 +30,12 @@ button, input, select, textarea {
     left: 0;
     top: 0;
     width: 100%;
-    padding: 24px !important;
+    max-height: 297mm;
+    padding: 16px 20px !important;
+    overflow: hidden !important;
+  }
+  #invoice-print-area table {
+    page-break-inside: avoid !important;
   }
   .no-print { display: none !important; }
 }
