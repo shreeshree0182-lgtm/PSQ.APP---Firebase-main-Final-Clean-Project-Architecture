@@ -5507,7 +5507,7 @@ const PSECTION_TITLE = {
 const PICON = { fontSize:16, lineHeight:1, display:"inline-flex", alignItems:"center", justifyContent:"center", width:18, flexShrink:0 };
 const PSUBHEAD = { fontSize:11.5, fontWeight:800, color:C.navy, marginBottom:14, display:"flex", alignItems:"center", gap:9, letterSpacing:"0.01em" };
 
-function ExteriorMaterialPanel({ config, onChange, quoteMode, extNet, paintingType = "fresh" }) {
+function ExteriorMaterialPanel({ config, onChange, quoteMode, extNet, paintingType = "fresh", locked = false }) {
   const [showBrand,setShowBrand]=useState(false);
   const [showFinishing,setShowFinishing]=useState(false);
   const withMat=quoteMode==="with_material";
@@ -5573,7 +5573,7 @@ function ExteriorMaterialPanel({ config, onChange, quoteMode, extNet, paintingTy
       </button>
 
       {showFinishing&&<div style={{marginTop:22}}>
-        <ExteriorFinishingModule finishing={finishing} onChange={fin=>onChange({...config,finishing:fin})} net={extNet||0} paintingType={paintingType} locked={isFinishesLocked}/>
+        <ExteriorFinishingModule finishing={finishing} onChange={fin=>onChange({...config,finishing:fin})} net={extNet||0} paintingType={paintingType} locked={locked}/>
       </div>}
     </div>
 
@@ -8775,6 +8775,7 @@ loadAllProjects().then(projects => {
                     quoteMode={project.quoteMode}
                     extNet={extNet}
                     paintingType={project.projectType || "fresh"}
+                    locked={isFinishesLocked}
                   />
 
                   {/* Part 3 — Elevation cards, built dynamically from project.exterior */}
@@ -8881,6 +8882,7 @@ loadAllProjects().then(projects => {
                             quoteMode={project.quoteMode}
                             extNet={elBreakdown.area}
                             paintingType={project.projectType || "fresh"}
+                            locked={isFinishesLocked}
                           />
                           {/* Per-elevation Labour — same config/onChange (resolvedEl/handleEdit)
                               as this elevation's own material panel above. Kept adjacent to
